@@ -56,12 +56,12 @@ from PyQt6.QtGui import QAction, QKeySequence, QShortcut
 
 import pyqtgraph as pg
 
-from .device import Device4882
 from .config_widget_base import (ConfigureWidgetBase,
                                  DoubleSpinBoxDelegate,
                                  ListTableModel,
                                  LongClickButton,
                                  MultiSpeedSpinBox)
+from .device import Device4882
 
 
 class InstrumentSiglentSPD3303(Device4882):

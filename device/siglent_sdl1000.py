@@ -121,12 +121,12 @@ from PyQt6.QtGui import QAction, QKeySequence, QShortcut
 
 import pyqtgraph as pg
 
-from .device import Device4882
 from .config_widget_base import (ConfigureWidgetBase,
                                  DoubleSpinBoxDelegate,
                                  ListTableModel,
                                  MultiSpeedSpinBox,
                                  PrintableTextDialog)
+from .device import Device4882
 
 
 class InstrumentSiglentSDL1000(Device4882):
