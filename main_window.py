@@ -21,6 +21,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ################################################################################
 
+import itertools
 import math
 import platform
 import sys
@@ -211,7 +212,7 @@ class MainWindow(QWidget):
         self._menubar_device.addAction(action)
 
         self._menubar_help = self._menubar.addMenu('&Help')
-        action = QAction('&About', self)
+        action = QAction('&About...', self)
         action.triggered.connect(self._menu_do_about)
         self._menubar_help.addAction(action)
 
@@ -523,11 +524,24 @@ class MainWindow(QWidget):
 
     def _menu_do_about(self):
         """Show the About box."""
-        supported = ', '.join(device.SUPPORTED_INSTRUMENTS)
-        msg = f"""Instrument Conductor.
+        # Group the instruments by first three characters (e.g. SDL, SDP)
+        supported = '\n'.join([', '.join(y) for y in
+                               [list(x[1]) for x in
+                                itertools.groupby(device.SUPPORTED_INSTRUMENTS,
+                                                  lambda x: x[:3])]])
+        open = '\n'.join(
+            [f'{x[1].resource_name} - {x[1].model}, S/N {x[1].serial_number}, '
+             f'FW {x[1].firmware_version}' for x in self._open_resources])
+        if open == '':
+            open = 'None'
+        msg = f"""Welcome to Instrument Conductor, a uniform controller for \
+Siglent benchtop instruments.
 
 Supported instruments:
 {supported}
+
+Currently open resources:
+{open}
 
 Copyright 2022, Robert S. French"""
         QMessageBox.about(self, 'About', msg)
@@ -593,7 +607,7 @@ Copyright 2022, Robert S. French"""
         # Update the measurement list with newly available measurements
         num_existing = len(self._measurement_times)
         measurements, triggers = config_widget.update_measurements_and_triggers(
-                                                                        read_inst=False)
+            read_inst=False)
         for meas_key, meas in measurements.items():
             name = meas['name']
             key = (inst.long_name, meas_key)
@@ -658,7 +672,6 @@ Copyright 2022, Robert S. French"""
         self._widget_measurement_points.setText(f'# Data Points: {npts}')
         self._widget_measurement_spent.setText(
             f'Last Measurement Duration: {self._last_measurement_duration:.3f} s')
-
 
     def _check_acquisition_ready(self):
         """Check to see if the current acquisition trigger is met."""
@@ -859,6 +872,7 @@ Copyright 2022, Robert S. French"""
         self._update_acquisition_indicator()
 
     def _update_pause_go_buttons(self):
+        """Update the Pause and Go buttons."""
         go_button = self._widget_registry['GoButton']
         pause_button = self._widget_registry['PauseButton']
         if self._user_paused:
@@ -869,6 +883,7 @@ Copyright 2022, Robert S. French"""
             pause_button.setEnabled(True)
 
     def _update_acquisition_indicator(self):
+        """Update the acquisition indicator."""
         label = self._widget_registry['AcquisitionIndicator']
         if self._acquisition_mode == 'Manual':
             color = '#b00000'
@@ -911,6 +926,7 @@ Copyright 2022, Robert S. French"""
             widget.measurements_changed()
 
     def closeEvent(self, event):
+        """Handle the user closing the main wnidow."""
         # Close all the sub-windows, allowing them to shut down peacefully
         # Closing a config window also removes it from the open resources list,
         # so we have to make a copy of the list before iterating.

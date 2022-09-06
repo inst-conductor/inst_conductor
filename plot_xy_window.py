@@ -548,7 +548,6 @@ class PlotXYWindow(QWidget):
                 if key == self._plot_y_sources[source_num]:
                     combo.setCurrentIndex(index+1) # Account for "Not used"
 
-
     def _on_update_views(self):
         """Resize the plot."""
         for viewbox in self._plot_viewboxes[1:]:

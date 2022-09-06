@@ -103,6 +103,7 @@ class Device(object):
             print(f'Connected to {self._resource_name}')
 
     def init_names(self, long_pfx, short_pfx, existing_names):
+        """Initialize long and short names and ensure uniqueness."""
         self._long_name = f'{long_pfx} @ {self._resource_name}'
         if self._resource_name.startswith('TCPIP'):
             ips = self._resource_name.split('.') # This only works with TCP!
@@ -215,7 +216,7 @@ class Device(object):
             raise ValueError
 
     def _validator_8(self, value):
-        if not (0 <= value <= 255): # Should this be 128? Or -128?
+        if not (0 <= value <= 255):  # Should this be 128? Or -128?
             raise ValueError
 
     def _validator_16(self, value):
@@ -276,18 +277,3 @@ class Device4882(Device):
     def trg(self):
         """Send a trigger command."""
         self.write('*TRG')
-
-    # def rcl(self, preset_value=None):
-    #     query = '*RCL?'
-    #     write = '*RCL'
-    #     return self.read_write(
-    #         query, write, self._validate.preset,
-    #         preset_value)
-    #
-    # # Saves the present setup (1..9)
-    # def sav(self, preset_value=None):
-    #     query = '*SAV?'
-    #     write = '*SAV'
-    #     return self.read_write(
-    #         query, write, self._validate.preset,
-    #         preset_value)

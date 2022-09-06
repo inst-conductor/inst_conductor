@@ -26,8 +26,11 @@ from .siglent_sdl1000 import InstrumentSiglentSDL1000
 from .siglent_spd3303 import InstrumentSiglentSPD3303
 
 
-_DEVICE_MAPPING = {}
-SUPPORTED_INSTRUMENTS = []
+_DEVICE_MAPPING = {}  # Mapping of IDN to Python class
+SUPPORTED_INSTRUMENTS = []  # List of model numbers of supported instruments
+# We could auto-discover these by looking for files in the current directory to
+# allow for future plug-in support, but that messes up the creation of Python
+# install images and it's a small list for now anyway.
 for cls in (InstrumentSiglentSDL1000,
             InstrumentSiglentSPD3303):
     _DEVICE_MAPPING.update(cls.idn_mapping())
@@ -52,5 +55,4 @@ def create_device(rm, resource_name, **kwargs):
         raise UnknownInstrumentType(idn)
     new_dev = cls(rm, resource_name, **kwargs)
     new_dev.connect(resource=dev._resource)
-    # print(f'Found a {manufacturer} {model}')
     return new_dev

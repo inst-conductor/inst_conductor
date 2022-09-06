@@ -1120,6 +1120,12 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         action.triggered.connect(self._menu_do_view_measurements)
         self._menubar_view.addAction(action)
 
+        ### Add to Help menu
+
+        action = QAction('&Keyboard Shortcuts...', self)
+        action.triggered.connect(self._menu_do_keyboard_shortcuts)
+        self._menubar_help.addAction(action)
+
         ### Set up configuration window widgets
 
         main_vert_layout = QVBoxLayout(toplevel_widget)
@@ -1715,6 +1721,13 @@ Connected to {self._inst.resource_name}
     FW {self._inst.firmware_version}"""
 
         QMessageBox.about(self, 'About', msg)
+
+    def _menu_do_keyboard_shortcuts(self):
+        """Show the Keyboard Shortcuts."""
+        msg = """Alt+L       Load ON/OFF
+Alt+T       Trigger
+"""
+        QMessageBox.about(self, 'Keyboard Shortcuts', msg)
 
     def _menu_do_save_configuration(self):
         """Save the current configuration to a file."""

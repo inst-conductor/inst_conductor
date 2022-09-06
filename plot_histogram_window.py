@@ -25,7 +25,6 @@ from PyQt6.QtWidgets import (QCheckBox,
                              QColorDialog,
                              QComboBox,
                              QGridLayout,
-                             QGroupBox,
                              QHBoxLayout,
                              QLabel,
                              QMenuBar,
@@ -404,7 +403,7 @@ class PlotHistogramWindow(QWidget):
     def update(self):
         """Update the plot using the current measurements."""
         if (len(self._main_window._measurement_times) == 0 or
-            self._plot_data_source is None):
+                self._plot_data_source is None):
             self._plot_item.setData([], [])
             self._widget_last_data.hide()
             self._widget_min_data.hide()
@@ -440,10 +439,6 @@ class PlotHistogramWindow(QWidget):
                 x_min = x_max - self._plot_duration
                 mask = times >= x_min
 
-        if mask is None:
-            times_mask = times
-        else:
-            times_mask = times[mask]
         vals = np.array(self._main_window._measurements[self._plot_data_source])
         if mask is not None:
             vals = vals[mask]

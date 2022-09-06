@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (QAbstractSpinBox,
                              QInputDialog,
                              QLayout,
                              QMenuBar,
+                             QMessageBox,
                              QPlainTextEdit,
                              QPushButton,
                              QStatusBar,
@@ -43,6 +44,7 @@ from PyQt6.QtPrintSupport import QPrintDialog
 
 
 class ConfigureWidgetBase(QWidget):
+    """The base class for all instrument configuration widgets."""
     def __init__(self, main_window, instrument):
         super().__init__()
         self._style_env = main_window._style_env
@@ -55,13 +57,24 @@ class ConfigureWidgetBase(QWidget):
         self.show() # Do this here so all the widgets get their sizes before being hidden
         self.refresh()
 
+    ### The following functions must be implemented by all configuration widgets.
+
     def refresh(self):
+        """Reload the UI state from the instrument state."""
         raise NotImplementedError
 
-    def update_measurements(self):
+    def update_measurements_and_triggers(self):
+        """Read current values, update control panel display, return the values."""
         raise NotImplementedError
+
+    ### Internal utility functions.
 
     def _toplevel_widget(self, has_reset=True):
+        """Create the basic toplevel configuration widget.
+
+        This widget has a menu bar containing Configuration, Device, View, and Help
+        menus; a scalable central widget; and a status bar.
+        """
         QWidget.__init__(self)
         self.setWindowTitle(f'{self._inst.long_name} ({self._inst.name})')
 
@@ -69,6 +82,8 @@ class ConfigureWidgetBase(QWidget):
         layoutv.setContentsMargins(0, 0, 0, 0)
         layoutv.setSpacing(0)
         layoutv.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
+
+        ### Create and populate the menu bar
 
         self._menubar = QMenuBar()
         self._menubar.setStyleSheet('margin: 0px; padding: 0px;')
@@ -81,6 +96,7 @@ class ConfigureWidgetBase(QWidget):
         action.triggered.connect(self._menu_do_save_configuration)
         self._menubar_configure.addAction(action)
         if has_reset:
+            # Not all devices support a reset SCPI command
             action = QAction('Reset device to &default', self)
             action.triggered.connect(self._menu_do_reset_device)
             self._menubar_configure.addAction(action)
@@ -101,8 +117,14 @@ class ConfigureWidgetBase(QWidget):
         self._menubar_help.addAction(action)
 
         layoutv.addWidget(self._menubar)
+
+        ### Create the central widget
+
         central_widget = QWidget()
         layoutv.addWidget(central_widget)
+
+        ### Create the status bar
+
         self._statusbar = QStatusBar()
         self._statusbar.setSizeGripEnabled(False)
         ss = """color: black; background-color: #c0c0c0; font-weight: bold;"""
@@ -112,9 +134,11 @@ class ConfigureWidgetBase(QWidget):
         return central_widget
 
     def _menu_do_refresh_configuration(self):
+        """Execute Configuration:Refresh from instrument menu option."""
         self.refresh()
 
     def _menu_do_rename_device(self):
+        """Execute Device:Rename menu option."""
         new_name, ok = QInputDialog.getText(self, 'Change device name',
                                             'Device name:',
                                             text=self._inst.name)
@@ -129,28 +153,34 @@ class ConfigureWidgetBase(QWidget):
     def device_renamed(self):
         """Called when the device is renamed."""
         self.setWindowTitle(f'{self._inst.long_name} ({self._inst.name})')
+        # Notify the main widget so that all of the UI lists and whatnot can be updated.
         self._main_window.device_renamed(self)
 
     def _menu_do_load_configuration(self):
+        """Execute Configuration:Load menu option."""
         raise NotImplementedError
 
     def _menu_do_save_configuration(self):
+        """Execute Configuration:Save As menu option."""
         raise NotImplementedError
 
     def _menu_do_reset_device(self):
+        """Execute Configuration:Reset device to default menu option."""
         raise NotImplementedError
 
     def _menu_do_about(self):
+        """Execute Help:About menu option."""
         raise NotImplementedError
 
     def closeEvent(self, event):
         """Handle window close event by disconnecting from the instrument."""
         self._inst.disconnect()
+        # Notify the main widget so that all of the UI lists and whatnot can be updated.
         self._main_window.device_window_closed(self._inst)
 
 
 class PrintableTextDialog(QDialog):
-    """Dialog that can be saved and printed."""
+    """Text-containing Dialog that can be saved and printed."""
     def __init__(self, title, contents, parent=None):
         super().__init__(parent)
         self.setWindowTitle(title)
@@ -319,21 +349,21 @@ class LongClickButton(QPushButton):
         # Execute longClick() after timer expires
         self._timer.timeout.connect(self.long_click)
 
-    # Rewrite the mousePressEvent method and turn on the timer
     def mousePressEvent(self, e):
+        """Rewrite the mousePressEvent method and turn on the timer."""
         self._timer.start(self._delay)
         super().mousePressEvent(e)
 
-    # Override the mouseReleaseEvent method and close the timer
     def mouseReleaseEvent(self, e):
+        """Override the mouseReleaseEvent method and close the timer."""
         active = self._timer.isActive()
         self._timer.stop()
         if active:
             self._click_handler(self)
         super().mouseReleaseEvent(e)
 
-    # What to do after long press
     def long_click(self):
+        """Execute the long click callback handler."""
         # Here, stop must also be called once, because mouseReleaseEvent will not be
         # executed in some scenarios, for example when QMessageBox is called.
         self._timer.stop()
