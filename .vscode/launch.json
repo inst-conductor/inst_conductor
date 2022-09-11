@@ -5,6 +5,17 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "SDM",
+            "type": "python",
+            "request": "launch",
+            "program": "inst_conductor.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "192.168.0.62"
+            ]
+        },
+        {
             "name": "SDL",
             "type": "python",
             "request": "launch",

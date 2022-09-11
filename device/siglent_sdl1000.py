@@ -1131,7 +1131,7 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         main_vert_layout = QVBoxLayout(toplevel_widget)
         main_vert_layout.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
 
-        ###### ROW 1 - Modes and Paramter Values ######
+        ###### ROW 1 - Modes and Parameter Values ######
 
         w = QWidget()
         row_layout = QHBoxLayout()
@@ -2390,7 +2390,7 @@ Alt+T       Trigger
             mode = 'Ext \u26A0'
         else:
             mode = self._param_state[':FUNCTION:MODE']
-            # Convert the title-case SDL-specific name to the name we use in the GUI
+            # Convert the uppercase SDL-specific name to the name we use in the GUI
             match mode:
                 case 'BASIC':
                     if self._param_state[':FUNCTION'] == 'LED':

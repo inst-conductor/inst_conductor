@@ -23,6 +23,7 @@
 
 from .device import Device4882
 from .siglent_sdl1000 import InstrumentSiglentSDL1000
+from .siglent_sdm3000 import InstrumentSiglentSDM3000
 from .siglent_spd3303 import InstrumentSiglentSPD3303
 
 
@@ -32,6 +33,7 @@ SUPPORTED_INSTRUMENTS = []  # List of model numbers of supported instruments
 # allow for future plug-in support, but that messes up the creation of Python
 # install images and it's a small list for now anyway.
 for cls in (InstrumentSiglentSDL1000,
+            InstrumentSiglentSDM3000,
             InstrumentSiglentSPD3303):
     _DEVICE_MAPPING.update(cls.idn_mapping())
     SUPPORTED_INSTRUMENTS += cls.supported_instruments()
