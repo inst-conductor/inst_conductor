@@ -171,6 +171,8 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
         self._widgets_on_off_buttons = [[], []]
         self._widgets_measurements = [[], []]
 
+        self._param_state = {}
+
         # Widget registry for various widgets we want to read or write
         self._widget_registry = {}
 

@@ -296,8 +296,8 @@ _STYLE_SHEET = {
 
 # This dictionary maps from the "overall" mode (shown in the left radio button group)
 # to the set of widgets that should be shown or hidden.
-#   !   means hide
-#   ~   means set as not enabled (greyed out)
+#   ~   means hide
+#   !   means set as not enabled (greyed out)
 #       No prefix means show and enable
 # Basically, the Dynamic modes (continuous, pulse, trigger) are only available in
 # Dynamic mode, and the Constant X modes are only available in Basic, Dynamic,
@@ -741,6 +741,8 @@ _SDL_MODE_PARAMS = {  # noqa: E121,E501
 
 class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
     def __init__(self, *args, **kwargs):
+        self._widget_registry = {}
+
         # The current state of all SCPI parameters. String values are always stored
         # in upper case!
         self._param_state = {}
@@ -2979,7 +2981,7 @@ Reset Addl Cap & Test Log to start fresh."""
         """Update the value for a single parameter on the instrument."""
         fmt_data = data
         if isinstance(data, bool):
-            fmt_data = '1' if True else '0'
+            fmt_data = '1' if data else '0'
         elif isinstance(data, float):
             fmt_data = '%.6f' % data
         elif isinstance(data, int):

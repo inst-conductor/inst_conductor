@@ -134,15 +134,21 @@ class Device(object):
         if self._debug:
             print(f'Disconnected from {self._resource_name}')
 
-    def query(self, s):
+    def query(self, s, timeout=None):
         """VISA query, write then read."""
         if not self._connected:
             raise NotConnectedError
+        old_timeout = self._resource.timeout
+        if timeout is not None:
+            self._resource.timeout = timeout
         try:
             ret = self._resource.query(s).strip(' \t\r\n')
         except pyvisa.errors.VisaIOError:
             self.disconnect()
+            if self._debug:
+                print(f'query "{s}" resulted in disconnect')
             raise ContactLostError
+        self._resource.timeout = old_timeout
         if self._debug:
             print(f'query "{s}" returned "{ret}"')
         return ret

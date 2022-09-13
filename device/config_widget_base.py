@@ -50,8 +50,6 @@ class ConfigureWidgetBase(QWidget):
         self._style_env = main_window._style_env
         self._main_window = main_window
         self._inst = instrument
-        self._param_state = {}
-        self._widget_registry = {}
         self._statusbar = None
         self._init_widgets()
         self.show() # Do this here so all the widgets get their sizes before being hidden
