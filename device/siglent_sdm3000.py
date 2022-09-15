@@ -152,8 +152,8 @@ class InstrumentSiglentSDM3000(Device4882):
 # Style sheets for different operating systems
 _STYLE_SHEET = {
     'FrameMode': {
-        'windows': 'QGroupBox { min-height: 10em; max-height: 10em; }',
-        'linux': 'QGroupBox { min-height: 10.5em; max-height: 10.5em; }',
+        'windows': 'QGroupBox { min-height: 10em; max-height: 11em; }',
+        'linux': 'QGroupBox { min-height: 10.5em; max-height: 11.5em; }',
     },
     'RangeButtons': {
         'windows': 'QRadioButton { min-width: 3em; }',
@@ -173,18 +173,18 @@ _COLORS_FOR_PARAMSETS = ['red', 'green', 'blue', 'yellow']
 #   !   means set as not enabled (greyed out)
 #       No prefix means show and enable
 _SDM_OVERALL_MODES = {
-    'DC Voltage':     ('~FrameRange_.*', '~FrameSpeed'),
-    'AC Voltage':     ('~FrameRange_.*', '~FrameSpeed'),
-    'DC Current':     ('~FrameRange_.*', '~FrameSpeed'),
-    'AC Current':     ('~FrameRange_.*', '~FrameSpeed'),
-    '2-W Resistance': ('~FrameRange_.*', '~FrameSpeed'),
-    '4-W Resistance': ('~FrameRange_.*', '~FrameSpeed'),
-    'Continuity':     ('~FrameRange_.*', '~FrameSpeed'),
-    'Diode':          ('~FrameRange_.*', '~FrameSpeed'),
-    'Frequency':      ('~FrameRange_.*', '~FrameSpeed'),
-    'Period':         ('~FrameRange_.*', '~FrameSpeed'),
-    'Temperature':    ('~FrameRange_.*', '~FrameSpeed'),
-    'Capacitance':    ('~FrameRange_.*', '~FrameSpeed'),
+    'DC Voltage':     ('~FrameRange_.*', '!Speed.*', '!DCFilter', '!Impedance.*'),
+    'AC Voltage':     ('~FrameRange_.*', '!Speed.*', '!DCFilter', '!Impedance.*'),
+    'DC Current':     ('~FrameRange_.*', '!Speed.*', '!DCFilter', '!Impedance.*'),
+    'AC Current':     ('~FrameRange_.*', '!Speed.*', '!DCFilter', '!Impedance.*'),
+    '2-W Resistance': ('~FrameRange_.*', '!Speed.*', '!DCFilter', '!Impedance.*'),
+    '4-W Resistance': ('~FrameRange_.*', '!Speed.*', '!DCFilter', '!Impedance.*'),
+    'Continuity':     ('~FrameRange_.*', '!Speed.*', '!DCFilter', '!Impedance.*'),
+    'Diode':          ('~FrameRange_.*', '!Speed.*', '!DCFilter', '!Impedance.*'),
+    'Frequency':      ('~FrameRange_.*', '!Speed.*', '!DCFilter', '!Impedance.*'),
+    'Period':         ('~FrameRange_.*', '!Speed.*', '!DCFilter', '!Impedance.*'),
+    'Temperature':    ('~FrameRange_.*', '!Speed.*', '!DCFilter', '!Impedance.*'),
+    'Capacitance':    ('~FrameRange_.*', '!Speed.*', '!DCFilter', '!Impedance.*'),
 }
 
 # This dictionary maps from the current overall mode (see above) to a description of
@@ -236,57 +236,60 @@ _SDM_MODE_PARAMS = {  # noqa: E121,E501
          )
         },
     ('DC Voltage'):
-        {'widgets': ('FrameRange_Voltage:DC', 'FrameSpeed'),
+        {'widgets': ('FrameRange_Voltage:DC', 'FrameParam1'),
          'mode_name': 'VOLT:DC',
          'params': (
             ('RANGE',                    'rv', None, 'Range_Voltage:DC_RB_.*'),
             ('RANGE:AUTO',                'b', None, 'Range_Voltage:DC_Auto'),
-            ('NPLC',                     'rs', None, 'Speed_.*'),
+            ('NPLC',                     'rs', 'SpeedLabel', 'Speed_.*'),
+            ('FILTER:STATE',              'b', None, 'DCFilter'),
+            ('IMP',                       'r', 'ImpedanceLabel', 'Impedance_.*'),
           )
         },
     ('AC Voltage'):
-        {'widgets': ('FrameRange_Voltage:AC', 'FrameSpeed'),
+        {'widgets': ('FrameRange_Voltage:AC', 'FrameParam1'),
          'mode_name': 'VOLT:AC',
          'params': (
             ('RANGE',                    'rv', None, 'Range_Voltage:AC_RB_.*'),
             ('RANGE:AUTO',                'b', None, 'Range_Voltage:AC_Auto'),
-            ('NPLC',                     'rs', None, 'Speed_.*'),
+            ('NPLC',                     'rs', 'SpeedLabel', 'Speed_.*'),
           )
         },
     ('DC Current'):
-        {'widgets': ('FrameRange_Current:DC', 'FrameSpeed'),
+        {'widgets': ('FrameRange_Current:DC', 'FrameParam1'),
          'mode_name': 'CURR:DC',
          'params': (
             ('RANGE',                    'ri', None, 'Range_Current:DC_RB_.*'),
             ('RANGE:AUTO',                'b', None, 'Range_Current:DC_Auto'),
-            ('NPLC',                     'rs', None, 'Speed_.*'),
+            ('NPLC',                     'rs', 'SpeedLabel', 'Speed_.*'),
+            ('FILTER:STATE',              'b', None, 'DCFilter'),
           )
         },
     ('AC Current'):
-        {'widgets': ('FrameRange_Current:AC', 'FrameSpeed'),
+        {'widgets': ('FrameRange_Current:AC', 'FrameParam1'),
          'mode_name': 'CURR:AC',
          'params': (
             ('RANGE',                    'ri', None, 'Range_Current:AC_RB_.*'),
             ('RANGE:AUTO',                'b', None, 'Range_Current:AC_Auto'),
-            ('NPLC',                     'rs', None, 'Speed_.*'),
+            ('NPLC',                     'rs', 'SpeedLabel', 'Speed_.*'),
           )
         },
     ('2-W Resistance'):
-        {'widgets': ('FrameRange_Resistance:2W', 'FrameSpeed'),
+        {'widgets': ('FrameRange_Resistance:2W', 'FrameParam1'),
          'mode_name': 'RES',
          'params': (
             ('RANGE',                    'rr', None, 'Range_Resistance:2W_RB_.*'),
             ('RANGE:AUTO',                'b', None, 'Range_Resistance:2W_Auto'),
-            ('NPLC',                     'rs', None, 'Speed_.*'),
+            ('NPLC',                     'rs', 'SpeedLabel', 'Speed_.*'),
           )
         },
     ('4-W Resistance'):
-        {'widgets': ('FrameRange_Resistance:4W', 'FrameSpeed'),
+        {'widgets': ('FrameRange_Resistance:4W', 'FrameParam1'),
          'mode_name': 'FRES',
          'params': (
             ('RANGE',                    'rr', None, 'Range_Resistance:4W_RB_.*'),
             ('RANGE:AUTO',                'b', None, 'Range_Resistance:4W_Auto'),
-            ('NPLC',                     'rs', None, 'Speed_.*'),
+            ('NPLC',                     'rs', 'SpeedLabel', 'Speed_.*'),
           )
         },
     ('Capacitance'):
@@ -339,7 +342,7 @@ _SDM_MODE_PARAMS = {  # noqa: E121,E501
 class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
     # The number of possible paramsets. If this is set to something other than
     # 4, the View menu will need to be updated.
-    _NUM_PARAMSET = 4
+    _NUM_PARAMSET = 1
 
     def __init__(self, *args, **kwargs):
         self._debug = True
@@ -511,17 +514,17 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                                  'val':    None},
         }
 
-        for paramset_num in range(1, self._NUM_PARAMSET):
+        for paramset_num in range(1, self._NUM_PARAMSET+1):
             if (paramset_num != 1 and
                 not self._widget_registry[paramset_num]['Enable'].isChecked()):
                 continue
             ltd_param_state = self._limited_param_state(paramset_num)
             for key, val in ltd_param_state.items():
-                if self._last_measurement_param_state.get(key) != val:
+                if self._last_measurement_param_state.get(key, None) != val:
                     self._update_one_param_on_inst(key, val)
             self._last_measurement_param_state = ltd_param_state
             val = float(self._inst.query('READ?', timeout=10000))
-            if val == 9.9e37:
+            if abs(val) == 9.9e37:
                 val = None
             mode = self._scpi_to_mode(self._param_state[paramset_num][':FUNCTION'])
             measurements[mode]['val'] = val
@@ -561,7 +564,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
         ### Add to View menu
 
         # If this changes, the menu needs to be updated
-        assert self._NUM_PARAMSET == 4
+        # assert self._NUM_PARAMSET == 4 XXX
         action = QAction('&Parameters #1', self, checkable=True)
         action.setShortcut(QKeySequence('Ctrl+1'))
         action.setChecked(True)
@@ -679,7 +682,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                              'Period',
                              'Temperature')):
                 layoutv = QVBoxLayout()
-                layoutv.setSpacing(0)
+                layoutv.setSpacing(10)
                 layouth.addLayout(layoutv)
                 for mode in columns:
                     rb = QRadioButton(mode)
@@ -689,7 +692,8 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                     rb.wid = (paramset_num, mode)
                     rb.toggled.connect(self._on_click_overall_mode)
                     self._widget_registry[paramset_num][f'Overall_{mode}'] = rb
-                layoutv.addStretch()
+
+            layouts.addStretch()
 
             ### ROWS 1-4, COLUMN 2 ###
 
@@ -741,23 +745,51 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                         f'Range_{mode}_RB_{range_name}'] = rb
 
             # Speed selection
-            frame = QGroupBox(f'Acquisition Speed')
-            self._widget_registry[paramset_num][f'FrameSpeed'] = frame
+            frame = QGroupBox(f'Acquisition Parameters')
+            self._widget_registry[paramset_num][f'FrameParam1'] = frame
             layouts.addWidget(frame)
-            layout = QGridLayout(frame)
-            layout.setSpacing(0)
+            layoutv2 = QVBoxLayout(frame)
+            layouth2 = QHBoxLayout()
+            layoutv2.addLayout(layouth2)
+            w = QLabel('Speed:')
+            layouth2.addWidget(w)
+            self._widget_registry[paramset_num]['SpeedLabel'] = w
             bg = QButtonGroup(layout)
-            for speed_num, speed in enumerate(('Slow', 'Medium', 'Fast')):
+            for speed in ('Slow', 'Medium', 'Fast'):
                 rb = QRadioButton(speed)
-                rb.setStyleSheet(_STYLE_SHEET['RangeButtons'][self._style_env])
                 bg.addButton(rb)
                 rb.button_group = bg
                 rb.wid = (paramset_num, speed)
                 rb.toggled.connect(self._on_click_speed)
-                row_num, col_num = divmod(speed_num, 4)
-                layout.addWidget(rb, row_num, col_num)
-                self._widget_registry[paramset_num][
-                    f'Speed_{speed}'] = rb
+                layouth2.addWidget(rb)
+                self._widget_registry[paramset_num][f'Speed_{speed}'] = rb
+            layouth2.addStretch()
+
+            # DC Filter selection
+            layouth2 = QHBoxLayout()
+            layoutv2.addLayout(layouth2)
+            w = QCheckBox('DC Filter')
+            w.wid = paramset_num
+            layouth2.addWidget(w)
+            w.toggled.connect(self._on_click_dcfilter)
+            self._widget_registry[paramset_num]['DCFilter'] = w
+
+            # Impedance selection
+            bg = QButtonGroup(layout)
+            layouth2.addStretch()
+            w = QLabel('Impedance:')
+            layouth2.addWidget(w)
+            self._widget_registry[paramset_num]['ImpedanceLabel'] = w
+            bg = QButtonGroup(layout)
+            for imp in ('10M', '10G'):
+                rb = QRadioButton(imp)
+                bg.addButton(rb)
+                rb.button_group = bg
+                rb.wid = (paramset_num, imp)
+                rb.toggled.connect(self._on_click_impedance)
+                layouth2.addWidget(rb)
+                self._widget_registry[paramset_num][f'Impedance_{imp}'] = rb
+            layouth2.addStretch()
 
             layouts.addStretch()
 
@@ -983,6 +1015,31 @@ Connected to {self._inst.resource_name}
         self._param_state[paramset_num][f':{mode_name}:NPLC'] = val
         self._update_widgets(paramset_num)
 
+    def _on_click_dcfilter(self):
+        """Handle clicking on the DC Filter checkbox."""
+        if self._disable_callbacks: # Prevent recursive calls
+            return
+        cb = self.sender()
+        paramset_num = cb.wid
+        val = cb.isChecked()
+        info = self._cur_mode_param_info(paramset_num)
+        mode_name = info['mode_name']
+        self._param_state[paramset_num][f':{mode_name}:FILTER:STATE'] = val
+        self._update_widgets(paramset_num)
+
+    def _on_click_impedance(self):
+        """Handle clicking on an impedance button."""
+        if self._disable_callbacks: # Prevent recursive calls
+            return
+        rb = self.sender()
+        if not rb.isChecked():
+            return
+        paramset_num, val = rb.wid
+        info = self._cur_mode_param_info(paramset_num)
+        mode_name = info['mode_name']
+        self._param_state[paramset_num][f':{mode_name}:IMP'] = val
+        self._update_widgets(paramset_num)
+
     def _on_value_change(self):
         """Handle clicking on any input value edit box."""
         if self._disable_callbacks: # Prevent recursive calls
@@ -1016,40 +1073,6 @@ Connected to {self._inst.resource_name}
         # set the boolean to True. This makes zero be the "deactivated" sentinal.
         if scpi_cmd_state in self._param_state:
             new_param_state[scpi_cmd_state] = int(val != 0)
-        # Check for the special case of a slew parameter. The rise and fall slew
-        # values are tied together. In 5A mode, both must be in the range
-        # 0.001-0.009 or 0.010-0.500. In 30A mode, both must be in the range
-        # 0.001-0.099 or 0.100-2.500. If one of the inputs goes outside of its
-        # current range, the other field needs to be changed.
-        if 'SLEW' in scpi_cmd:
-            if mode_name == '':
-                trans = ''
-            else:
-                trans = self._transient_string()
-            irange = self._param_state[f'{mode_name}{trans}:IRANGE']
-            if input.registry_name.endswith('SlewPos'):
-                other_name = input.registry_name.replace('SlewPos', 'SlewNeg')
-                other_scpi = scpi.replace('POSITIVE', 'NEGATIVE')
-            else:
-                other_name = input.registry_name.replace('SlewNeg', 'SlewPos')
-                other_scpi = scpi.replace('NEGATIVE', 'POSITIVE')
-            other_widget = self._widget_registry[other_name]
-            orig_other_val = other_val = other_widget.value()
-            if irange == '5':
-                if 0.001 <= val <= 0.009:
-                    if not (0.001 <= other_val <= 0.009):
-                        other_val = 0.009
-                elif not (0.010 <= other_val <= 0.500):
-                    other_val = 0.010
-            else:
-                if 0.001 <= val <= 0.099:
-                    if not (0.001 <= other_val <= 0.099):
-                        other_val = 0.099
-                elif not (0.100 <= other_val <= 2.500):
-                    other_val = 0.100
-            if orig_other_val != other_val:
-                scpi_cmd = f'{mode_name}:{other_scpi}'
-                new_param_state[scpi_cmd] = other_val
         self._update_param_state_and_inst(new_param_state)
         self._update_widgets()
 
@@ -1294,7 +1317,7 @@ Connected to {self._inst.resource_name}
             case 0.3:
                 return 'Fast'
             case _:
-                assert False, params
+                assert False, param
 
     def _speed_disp_to_scpi_write(self, param):
         """Convert a Speed display to a SCPI write."""
@@ -1421,6 +1444,14 @@ Connected to {self._inst.resource_name}
                     assert False, f'Unknown widget parameters {rest}'
 
             if widget_label is not None:
+                # We have to do a hack here for the Impedance radio buttons, because
+                # they can only be enabled when the RANGE:AUTO is off and the manual
+                # range is set to 200mV or 2V.
+                if widget_label.startswith('Impedance'):
+                    if (self._param_state[paramset_num][':VOLT:DC:RANGE:AUTO'] or
+                        self._param_state[paramset_num][':VOLT:DC:RANGE'] not in
+                            ('200MV', '2V')):
+                        continue
                 self._widget_registry[paramset_num][widget_label].show()
                 self._widget_registry[paramset_num][widget_label].setEnabled(True)
 
@@ -1529,17 +1560,13 @@ Connected to {self._inst.resource_name}
 # [SENSe:]CURRent:{AC|DC}:NULL[:STATe]
 # [SENSe:]CURRent:{AC|DC}:NULL:VALue  -12 A to 12 A
 # [SENSe:]CURRent[:DC]:NPLC 0.3 | 1 | 10  FAST/MIDDLE/SLOW
-# [SENSe]:CURRent[:DC]:FILTer[:STATe]
 
 # All parameters are shared between frequency and period measurements.
 # [SENSe:]{FREQuency|PERiod}:NULL[:STATe] {ON|1|OFF|0}
 # [SENSe:]{FREQuency|PERiod}:NULL:VALue {<value>| minimum | maximum | default } -1.2E6 to +1.2E6
 # [SENSe:]{FREQuency|PERiod}:NULL:VALue:AUTO {ON|1|OFF|0}
 # [SENSe:]{FREQuency|PERiod}:RANGe:LOWer {<filter>|MIN|MAX|DEF}
-# [SENSe:]{FREQuency|PERiod}:VOLTage:RANGe {<range>|MIN|MAX|DEF}
-# [SENSe:]{FREQuency|PERiod}:VOLTage:RANGe:AUTO {OFF|ON|ONCE}
 
-# [SENSe:]{RESistance|FRESistance}:NPLC
 # [SENSe:]{RESistance|FRESistance}:NULL[:STATe]
 # [SENSe:]{RESistance|FRESistance}:NULL:VALue             -120 MOHM to 120 MOHM
 # [SENSe:]{RESistance|FRESistance}:NULL:VALue:AUTO
@@ -1556,8 +1583,6 @@ Connected to {self._inst.resource_name}
 # [SENSe:]VOLTage:{AC|DC}:NULL[:STATe]
 # [SENSe:]VOLTage:{AC|DC}:NULL:VALue      -1200 TO +1,200 V
 # [SENSe:]VOLTage:{AC|DC}:NULL:VALue:AUTO
-# [SENSe:]VOLTage[:DC]:NPLC
-# [SENSe]:VOLTage[:DC]:FILTer[:STATe]
 # [SENSe:]VOLTage[:DC]:IMPedance
 
 # [SENSe:]CAPacitance:NULL[:STATe]
