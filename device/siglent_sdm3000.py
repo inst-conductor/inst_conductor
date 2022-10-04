@@ -342,7 +342,7 @@ _SDM_MODE_PARAMS = {  # noqa: E121,E501
 class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
     # The number of possible paramsets. If this is set to something other than
     # 4, the View menu will need to be updated.
-    _NUM_PARAMSET = 1
+    _NUM_PARAMSET = 4
 
     def __init__(self, *args, **kwargs):
         self._debug = True
@@ -754,7 +754,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
             w = QLabel('Speed:')
             layouth2.addWidget(w)
             self._widget_registry[paramset_num]['SpeedLabel'] = w
-            bg = QButtonGroup(layout)
+            bg = QButtonGroup(layouth2)
             for speed in ('Slow', 'Medium', 'Fast'):
                 rb = QRadioButton(speed)
                 bg.addButton(rb)
@@ -775,12 +775,11 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
             self._widget_registry[paramset_num]['DCFilter'] = w
 
             # Impedance selection
-            bg = QButtonGroup(layout)
             layouth2.addStretch()
             w = QLabel('Impedance:')
             layouth2.addWidget(w)
             self._widget_registry[paramset_num]['ImpedanceLabel'] = w
-            bg = QButtonGroup(layout)
+            bg = QButtonGroup(layouth2)
             for imp in ('10M', '10G'):
                 rb = QRadioButton(imp)
                 bg.addButton(rb)
@@ -789,6 +788,59 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                 rb.toggled.connect(self._on_click_impedance)
                 layouth2.addWidget(rb)
                 self._widget_registry[paramset_num][f'Impedance_{imp}'] = rb
+            layouth2.addStretch()
+
+            layouts.addStretch()
+
+            ### ROWS 1-4, COLUMN 3 ###
+
+            layouts = QVBoxLayout()
+            layouts.setSpacing(0)
+            row_layout.addLayout(layouts)
+
+            # Relative measurement
+            frame = QGroupBox(f'Relative To')
+            self._widget_registry[paramset_num]['FrameRelative'] = frame
+            layouts.addWidget(frame)
+            layoutv2 = QVBoxLayout(frame)
+
+            # Relative measurement mode on
+            w = QCheckBox('Relative Mode On')
+            w.wid = paramset_num
+            layoutv2.addWidget(w)
+            w.toggled.connect(self._on_click_rel_mode_on)
+            self._widget_registry[paramset_num]['RelModeOn'] = w
+
+            layouth2 = QHBoxLayout()
+            label = QLabel('Relative Value:')
+            layouth2.addWidget(label)
+            input = MultiSpeedSpinBox(1.)
+            input.wid = paramset_num
+            input.setAlignment(Qt.AlignmentFlag.AlignRight)
+            input.setDecimals(3)
+            input.setAccelerated(True)
+            input.editingFinished.connect(self._on_value_change_rel_mode)
+            layouth2.addWidget(input)
+            label.sizePolicy().setRetainSizeWhenHidden(True)
+            input.sizePolicy().setRetainSizeWhenHidden(True)
+            layoutv2.addLayout(layouth2)
+            self._widget_registry[paramset_num]['RelModeVal'] = input
+
+            # Relative value source
+            layouth2 = QHBoxLayout()
+            layoutv2.addLayout(layouth2)
+            w = QLabel('Value source:')
+            layouth2.addWidget(w)
+            self._widget_registry[paramset_num]['RelModeSourceLabel'] = w
+            bg = QButtonGroup(layouth2)
+            for imp in ('Manual', 'Last', 'Last 10'):
+                rb = QRadioButton(imp)
+                bg.addButton(rb)
+                rb.button_group = bg
+                rb.wid = (paramset_num, imp)
+                rb.toggled.connect(self._on_click_rel_mode_source)
+                layouth2.addWidget(rb)
+                self._widget_registry[paramset_num][f'RelModeSource_{imp}'] = rb
             layouth2.addStretch()
 
             layouts.addStretch()
@@ -1039,6 +1091,18 @@ Connected to {self._inst.resource_name}
         mode_name = info['mode_name']
         self._param_state[paramset_num][f':{mode_name}:IMP'] = val
         self._update_widgets(paramset_num)
+
+    def _on_click_rel_mode_on(self):
+        """Handle clicking on the relative mode on checkbox."""
+        pass
+
+    def _on_click_rel_mode_source(self):
+        """Handle clicking on a relative mode source radio button."""
+        pass
+
+    def _on_value_change_rel_mode(self):
+        """Handling entering a value for the relative mode."""
+        pass
 
     def _on_value_change(self):
         """Handle clicking on any input value edit box."""
