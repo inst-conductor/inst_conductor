@@ -41,7 +41,7 @@
 # pleasant characters, like using the ohm symbol instead of writing out the word
 # "ohm". This means there are three versions of each RANGE parameter:
 #   - What you get from "RANGE?"
-#   - What you sent to "RANGE"
+#   - What you send to "RANGE"
 #   - What you display on the screen
 # We standardize the _param_state variable to be the value written to the
 # instrument for "RANGE" and convert elsewhere.
@@ -62,7 +62,6 @@
 
 import json
 import re
-import time
 
 from PyQt6.QtWidgets import (QWidget,
                              QButtonGroup,
@@ -74,20 +73,13 @@ from PyQt6.QtWidgets import (QWidget,
                              QLabel,
                              QLayout,
                              QMessageBox,
-                             QPushButton,
                              QRadioButton,
-                             QTableView,
                              QVBoxLayout)
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QAction, QKeySequence, QShortcut
-
-import pyqtgraph as pg
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QAction, QKeySequence
 
 from .config_widget_base import (ConfigureWidgetBase,
-                                 DoubleSpinBoxDelegate,
-                                 ListTableModel,
-                                 MultiSpeedSpinBox,
-                                 PrintableTextDialog)
+                                 MultiSpeedSpinBox)
 from .device import Device4882
 
 
@@ -96,6 +88,7 @@ class InstrumentSiglentSDM3000(Device4882):
 
     @classmethod
     def idn_mapping(cls):
+        """Map IDN information to an instrument class."""
         return {
             ('Siglent Technologies', 'SDM3045X'): InstrumentSiglentSDM3000,
             ('Siglent Technologies', 'SDM3055'):  InstrumentSiglentSDM3000,
@@ -104,6 +97,7 @@ class InstrumentSiglentSDM3000(Device4882):
 
     @classmethod
     def supported_instruments(cls):
+        """Return a list of supported instrument models."""
         return (
             'SDM3045X',
             'SDM3055',
@@ -111,8 +105,8 @@ class InstrumentSiglentSDM3000(Device4882):
         )
 
     def __init__(self, *args, **kwargs):
+        existing_names = kwargs.pop('existing_names')
         super().__init__(*args, **kwargs)
-        existing_names = kwargs['existing_names']
         super().init_names('SDM3000', 'SDM', existing_names)
 
     def connect(self, *args, **kwargs):
@@ -135,7 +129,7 @@ class InstrumentSiglentSDM3000(Device4882):
 
     def disconnect(self, *args, **kwargs):
         """Disconnect from the instrument and turn off its remote state."""
-        # There is no way to put the device back in local mode except by pressing the
+        # There is no way to put the SDM back in local mode except by pressing the
         # LOCAL button on the front panel
         super().disconnect(*args, **kwargs)
 

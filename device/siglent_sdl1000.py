@@ -134,6 +134,7 @@ class InstrumentSiglentSDL1000(Device4882):
 
     @classmethod
     def idn_mapping(cls):
+        """Map IDN information to an instrument class."""
         return {
             ('Siglent Technologies', 'SDL1020X'):   InstrumentSiglentSDL1000,
             ('Siglent Technologies', 'SDL1020X-E'): InstrumentSiglentSDL1000,
@@ -143,6 +144,7 @@ class InstrumentSiglentSDL1000(Device4882):
 
     @classmethod
     def supported_instruments(cls):
+        """Return a list of supported instrument models."""
         return (
             'SDL1020X',
             'SDL1020X-E',

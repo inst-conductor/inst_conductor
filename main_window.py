@@ -21,6 +21,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ################################################################################
 
+from collections import namedtuple
 import itertools
 import math
 import platform
@@ -112,6 +113,9 @@ class IPAddressDialog(QDialog):
 
 class MainWindow(QWidget):
     """The main window of the entire application."""
+
+    ResourceAttributes = namedtuple('ResourceAttributes', ['name', 'inst',
+                                                           'config_widget'])
     def __init__(self, app, argv):
         super().__init__()
         self.setWindowTitle('Instrument Conductor')
@@ -127,9 +131,7 @@ class MainWindow(QWidget):
         self.app = app
         self.resource_manager = pyvisa.ResourceManager('@py')
 
-        # Tuple of (resource_name,
-        #           instrument class instance,
-        #           config widget class instance)
+        # Tuple of ResourceAttributes
         self._open_resources = []
 
         self._measurement_times = []
@@ -515,7 +517,7 @@ class MainWindow(QWidget):
                 resource_name = self._recent_resources[num]
                 action.setText(f'&{num+1} {resource_name}')
                 action.setVisible(True)
-                if resource_name in [x[0] for x in self._open_resources]:
+                if resource_name in [x.name for x in self._open_resources]:
                     action.setEnabled(False)
                 else:
                     action.setEnabled(True)
@@ -530,8 +532,8 @@ class MainWindow(QWidget):
                                 itertools.groupby(device.SUPPORTED_INSTRUMENTS,
                                                   lambda x: x[:3])]])
         open = '\n'.join(
-            [f'{x[1].resource_name} - {x[1].model}, S/N {x[1].serial_number}, '
-             f'FW {x[1].firmware_version}' for x in self._open_resources])
+            [f'{x.inst.resource_name} - {x[1].model}, S/N {x[1].serial_number}, '
+             f'FW {x.inst.firmware_version}' for x in self._open_resources])
         if open == '':
             open = 'None'
         msg = f"""Welcome to Instrument Conductor, a uniform controller for \
@@ -568,7 +570,7 @@ Copyright 2022, Robert S. French"""
 
     def _open_resource(self, resource_name):
         """Open a resource by name."""
-        if resource_name in [x[0] for x in self._open_resources]:
+        if resource_name in [x.name for x in self._open_resources]:
             QMessageBox.critical(self, 'Error',
                                  f'Resource "{resource_name}" is already open!')
             return
@@ -591,7 +593,8 @@ Copyright 2022, Robert S. French"""
         inst.connect()
         config_widget = inst.configure_widget(self)
         config_widget.show()
-        self._open_resources.append((resource_name, inst, config_widget))
+        self._open_resources.append(self.ResourceAttributes(
+            name=resource_name, inst=inst, config_widget=config_widget))
 
         # Update the recent resource list and put this resource on top
         try:
@@ -680,10 +683,10 @@ Copyright 2022, Robert S. French"""
                 self._acquisition_ready = True
                 return
             case 'State':
-                for resource_name, inst, config_widget in self._open_resources:
-                    if config_widget is not None:
-                        for trigger_key, trigger in config_widget.get_triggers().items():
-                            key = (inst.long_name, trigger_key)
+                for ra in self._open_resources:
+                    if ra.config_widget is not None:
+                        for trigger_key, trigger in ra.config_widget.get_triggers().items():
+                            key = (ra.inst.long_name, trigger_key)
                             if key == self._measurement_state_source:
                                 self._acquisition_ready = trigger['val']
                                 return
@@ -693,13 +696,13 @@ Copyright 2022, Robert S. French"""
                 src = self._measurement_value_source
                 if src not in self._measurements:
                     return
-                for resource_name, inst, config_widget in self._open_resources:
-                    if config_widget is not None:
-                        if src[0] == inst.long_name:
+                for ra in self._open_resources:
+                    if ra.config_widget is not None:
+                        if src[0] == ra.inst.long_name:
                             break
                 else:
                     assert False, self._measurement_value_source
-                meas = config_widget.get_measurements()
+                meas = ra.config_widget.get_measurements()
                 val = meas[src[1]]['val']
                 if val is None:
                     return
@@ -732,9 +735,9 @@ Copyright 2022, Robert S. French"""
             return
         start_time = time.time()
         # First update all the cached measurements and config widget displays
-        for resource_name, inst, config_widget in self._open_resources:
-            if config_widget is not None:
-                config_widget.update_measurements_and_triggers()
+        for ra in self._open_resources:
+            if ra.config_widget is not None:
+                ra.config_widget.update_measurements_and_triggers()
         end_time = time.time()
         self._last_measurement_duration = end_time - start_time
         # Check for the current trigger condition
@@ -753,19 +756,19 @@ Copyright 2022, Robert S. French"""
         # Now go through and read all the cached measurements
         meas_updated_keys = []
         trig_updated_keys = []
-        for resource_name, inst, config_widget in self._open_resources:
-            if config_widget is not None:
-                measurements = config_widget.get_measurements()
+        for ra in self._open_resources:
+            if ra.config_widget is not None:
+                measurements = ra.config_widget.get_measurements()
                 for meas_key, meas in measurements.items():
                     name = meas['name']
-                    key = (inst.long_name, meas_key)
+                    key = (ra.inst.long_name, meas_key)
                     meas_updated_keys.append(key)
                     if key not in self._measurements:
                         self._measurements[key] = ([math.nan] *
                                                    len(self._measurement_times))
                         self._measurement_units[key] = meas['unit']
                         self._measurement_formats[key] = meas['format']
-                        self._measurement_names[key] = f'{inst.name}: {name}'
+                        self._measurement_names[key] = f'{ra.inst.name}: {name}'
                     if force_nan:
                         val = math.nan
                     else:
@@ -774,16 +777,16 @@ Copyright 2022, Robert S. French"""
                             val = math.nan
                     self._measurements[key].append(val)
                     # The user can change the short name
-                    self._measurement_names[key] = f'{inst.name}: {name}'
-                triggers = config_widget.get_triggers()
+                    self._measurement_names[key] = f'{ra.inst.name}: {name}'
+                triggers = ra.config_widget.get_triggers()
                 for trig_key, trig in triggers.items():
                     name = trig['name']
-                    key = (inst.long_name, trig_key)
+                    key = (ra.inst.long_name, trig_key)
                     trig_updated_keys.append(key)
                     if key not in self._triggers:
                         self._triggers[key] = ([math.nan] *
                                                len(self._measurement_times))
-                        self._trigger_names[key] = f'{inst.name}: {name}'
+                        self._trigger_names[key] = f'{ra.inst.name}: {name}'
                     if force_nan:
                         val = math.nan
                     else:
@@ -792,7 +795,7 @@ Copyright 2022, Robert S. French"""
                             val = math.nan
                     self._triggers[key].append(val)
                     # The user can change the short name
-                    self._trigger_names[key] = f'{inst.name}: {name}'
+                    self._trigger_names[key] = f'{ra.inst.name}: {name}'
         if len(meas_updated_keys) > 0:
             # As long as we updated at least one real instrument, then go through
             # the measurement list and see which instruments we didn't update. This
@@ -835,22 +838,22 @@ Copyright 2022, Robert S. French"""
             return
         trigger_index = 0
         measurement_index = 0
-        for resource_name, inst, config_widget in self._open_resources:
-            if config_widget is not None:
-                for trigger_key, trigger in config_widget.get_triggers().items():
+        for ra in self._open_resources:
+            if ra.config_widget is not None:
+                for trigger_key, trigger in ra.config_widget.get_triggers().items():
                     trig_name = trigger['name']
-                    name = f'{inst.name}: {trig_name}'
-                    key = (inst.long_name, trigger_key)
+                    name = f'{ra.inst.name}: {trig_name}'
+                    key = (ra.inst.long_name, trigger_key)
                     state_combo.addItem(name, userData=key)
                     if self._measurement_state_source is None:
                         self._measurement_state_source = key
                     if key == self._measurement_state_source:
                         trigger_found = trigger_index
                     trigger_index += 1
-                for meas_key, measurement in config_widget.get_measurements().items():
+                for meas_key, measurement in ra.config_widget.get_measurements().items():
                     meas_name = measurement['name']
-                    name = f'{inst.name}: {meas_name}'
-                    key = (inst.long_name, meas_key)
+                    name = f'{ra.inst.name}: {meas_name}'
+                    key = (ra.inst.long_name, meas_key)
                     val_src_combo.addItem(name, userData=key)
                     if self._measurement_value_source is None:
                         self._measurement_value_source = key
@@ -905,7 +908,7 @@ Copyright 2022, Robert S. French"""
     @property
     def device_names(self):
         """Return a list of all device names currently open."""
-        return [x[1].name for x in self._open_resources]
+        return [x.inst.name for x in self._open_resources]
 
     def device_renamed(self, config_widget):
         """Called when a device configuration window is renamed by the user."""
@@ -930,14 +933,14 @@ Copyright 2022, Robert S. French"""
         # Close all the sub-windows, allowing them to shut down peacefully
         # Closing a config window also removes it from the open resources list,
         # so we have to make a copy of the list before iterating.
-        for resource_name, inst, config_widget in self._open_resources[:]:
-            config_widget.close()
+        for ra in self._open_resources[:]:
+            ra.config_widget.close()
         for widget in self._measurement_display_widgets:
             widget.close()
 
     def device_window_closed(self, inst):
         """Update internal state when one of the configuration widgets is closed."""
-        idx = [x[0] for x in self._open_resources].index(inst.resource_name)
+        idx = [x.name for x in self._open_resources].index(inst.resource_name)
         del self._open_resources[idx]
         self._refresh_menubar_device_recent_resources()
         # for key in list(self._measurements): # Need list because we're modifying keys

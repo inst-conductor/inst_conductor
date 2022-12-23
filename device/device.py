@@ -35,7 +35,7 @@ class ContactLostError(Exception):
 
 class Device(object):
     """Class representing any generic device accessible through VISA."""
-    def __init__(self, resource_manager, resource_name, *args, **kwargs):
+    def __init__(self, resource_manager, resource_name):
         self._resource_manager = resource_manager
         self._resource_name = resource_name
         self._long_name = resource_name
@@ -87,6 +87,16 @@ class Device(object):
 
     def set_debug(self, val):
         self._debug = val
+
+    @classmethod
+    def idn_mapping(cls):
+        """Map IDN information to an instrument class."""
+        raise NotImplementedError
+
+    @classmethod
+    def supported_instruments(cls):
+        """Return a list of supported instrument models."""
+        raise NotImplementedError
 
     def connect(self, resource=None):
         """Open the connection to the device."""
