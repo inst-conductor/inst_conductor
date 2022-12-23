@@ -104,8 +104,7 @@ class InstrumentSiglentSDM3000(Device4882):
             'SDM3065X'
         )
 
-    def __init__(self, *args, **kwargs):
-        existing_names = kwargs.pop('existing_names')
+    def __init__(self, *args, existing_names=None, **kwargs):
         super().__init__(*args, **kwargs)
         super().init_names('SDM3000', 'SDM', existing_names)
 

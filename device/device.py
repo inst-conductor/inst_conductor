@@ -120,7 +120,7 @@ class Device(object):
             short_name = f'{short_pfx}{ips[-1]}'
         else:
             short_name = short_pfx
-        if short_name in existing_names:
+        if existing_names and short_name in existing_names:
             sfx = 1
             while True:
                 short_name2 = f'{short_name}[{sfx}]'
