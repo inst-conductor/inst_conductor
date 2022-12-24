@@ -51,6 +51,10 @@ class Device(object):
         self._io_lock = asyncio.Lock()
 
     @property
+    def connected(self):
+        return self._connected
+
+    @property
     def manufacturer(self):
         return self._manufacturer
 

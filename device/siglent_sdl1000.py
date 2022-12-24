@@ -808,6 +808,8 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         self._list_mode_timer.setInterval(250)
         self._list_mode_timer.start()
 
+        self._measurement_interval = 250 # ms
+
 
     ######################
     ### Public methods ###
@@ -952,6 +954,11 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         self._cached_measurements = measurements
         self._cached_triggers = triggers
 
+    async def start_measurements(self):
+        """Start the measurement loop."""
+        await self._update_measurements_and_triggers()
+
+    @asyncSlot()
     async def _update_measurements_and_triggers(self):
         """Read current values and update control panel display."""
         # Update the load on/off state in case we hit a protection limit
@@ -967,85 +974,43 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         triggers['ListRunning']['val'] = bool(self._list_mode_running)
 
         voltage = None
-        w = self._widget_registry['MeasureV']
         if self._enable_measurement_v:
             # Voltage is available regardless of the input state
             voltage = await self._inst.measure_voltage()
-            w.setText(f'{voltage:10.6f} V')
-        else:
-            w.setText('---   V')
         measurements['Voltage']['val'] = voltage
 
-        w = self._widget_registry['MeasureC']
-        if self._enable_measurement_c:
+        current = None
+        if self._enable_measurement_c and input_state:
             # Current is only available when the load is on
-            if not input_state:
-                w.setText('N/A   A')
-            else:
-                current = await self._inst.measure_current()
-                w.setText(f'{current:10.6f} A')
-        else:
-            w.setText('---   A')
+            current = await self._inst.measure_current()
         measurements['Current']['val'] = current
 
+        power = None
         w = self._widget_registry['MeasureP']
-        if self._enable_measurement_p:
+        if self._enable_measurement_p and input_state:
             # Power is only available when the load is on
-            if not input_state:
-                w.setText('N/A   W')
-            else:
-                power = await self._inst.measure_power()
-                w.setText(f'{power:10.6f} W')
-        else:
-            w.setText('---   W')
+            power = await self._inst.measure_power()
         measurements['Power']['val'] = power
 
+        resistance = None
         w = self._widget_registry['MeasureR']
-        if self._enable_measurement_r:
+        if self._enable_measurement_r and input_state:
             # Resistance is only available when the load is on
-            if not input_state:
-                w.setText('N/A   \u2126')
-            else:
-                resistance = await self._inst.measure_resistance()
-                if resistance < 10:
-                    fmt = '%8.6f'
-                elif resistance < 100:
-                    fmt = '%8.5f'
-                elif resistance < 1000:
-                    fmt = '%8.4f'
-                elif resistance < 10000:
-                    fmt = '%8.3f'
-                elif resistance < 100000:
-                    fmt = '%8.2f'
-                else:
-                    fmt = '%8.1f'
-                w.setText(f'{fmt} \u2126' % resistance)
-        else:
-            w.setText('---   \u2126')
+            resistance = await self._inst.measure_resistance()
         measurements['Resistance']['val'] = resistance
 
+        trise = None
         w = self._widget_registry['MeasureTRise']
-        if self._enable_measurement_trise:
+        if self._enable_measurement_trise and input_state:
             # Trise is only available when the load is on
-            if not input_state:
-                w.setText('TRise:   N/A   s')
-            else:
-                trise = await self._inst.measure_trise()
-                w.setText(f'TRise: {trise:7.3f} s')
-        else:
-            w.setText('TRise:   ---   s')
+            trise = await self._inst.measure_trise()
         measurements['TRise']['val'] = trise
 
+        tfall = None
         w = self._widget_registry['MeasureTFall']
-        if self._enable_measurement_tfall:
+        if self._enable_measurement_tfall and input_state:
             # Tfall is only available when the load is on
-            if not input_state:
-                w.setText('TFall:   N/A   s')
-            else:
-                tfall = await self._inst.measure_tfall()
-                w.setText(f'TFall: {tfall:7.3f} s')
-        else:
-            w.setText('TFall:   ---   s')
+            tfall = await self._inst.measure_tfall()
         measurements['TFall']['val'] = tfall
 
         disch_time = None
@@ -1057,18 +1022,8 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
             if self._batt_log_initial_voltage is None:
                 self._batt_log_initial_voltage = voltage
             disch_time = await self._inst.measure_battery_time()
-            m, s = divmod(disch_time, 60)
-            h, m = divmod(m, 60)
-            w = self._widget_registry['MeasureBattTime']
-            w.setText(f'{int(h):02d}:{int(m):02d}:{int(s):02}')
-
-            w = self._widget_registry['MeasureBattCap']
             disch_cap = await self._inst.measure_battery_capacity()
-            w.setText(f'{disch_cap:7.3f} Ah')
-
-            w = self._widget_registry['MeasureBattAddCap']
             add_cap = await self._inst.measure_battery_add_capacity()
-            w.setText(f'Addl Cap: {add_cap:7.3f} Ah')
 
             # When the LOAD is OFF, we have already updated the ADDCAP to include the
             # current test results, so we don't want to add it in a second time
@@ -1076,12 +1031,90 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
                 total_cap = disch_cap+add_cap
             else:
                 total_cap = add_cap
-            w = self._widget_registry['MeasureBattTotalCap']
-            w.setText(f'Total Cap: {total_cap:7.3f} Ah')
         measurements['Discharge Time']['val'] = disch_time
         measurements['Capacity']['val'] = disch_cap
         measurements['Addl Capacity']['val'] = add_cap
         measurements['Total Capacity']['val'] = total_cap
+
+        w = self._widget_registry['MeasureV']
+        if self._enable_measurement_v:
+            if voltage is not None:
+                w.setText(f'{voltage:10.6f} V')
+            else:
+                w.setText('N/A   V')
+        else:
+                w.setText('---   V')
+
+        w = self._widget_registry['MeasureC']
+        if not self._enable_measurement_c:
+            w.setText('---   A')
+        elif not input_state:
+            w.setText('N/A   A')
+        else:
+            w.setText(f'{current:10.6f} A')
+
+        w = self._widget_registry['MeasureP']
+        if not self._enable_measurement_p:
+            w.setText(f'---   W')
+        elif not input_state:
+            w.setText('N/A   W')
+        else:
+            w.setText(f'{power:10.6f} W')
+
+        w = self._widget_registry['MeasureR']
+        if not self._enable_measurement_r:
+            w.setText('---   \u2126')
+        elif not input_state:
+            w.setText('N/A   \u2126')
+        else:
+            if resistance < 10:
+                fmt = '%8.6f'
+            elif resistance < 100:
+                fmt = '%8.5f'
+            elif resistance < 1000:
+                fmt = '%8.4f'
+            elif resistance < 10000:
+                fmt = '%8.3f'
+            elif resistance < 100000:
+                fmt = '%8.2f'
+            else:
+                fmt = '%8.1f'
+            w.setText(f'{fmt} \u2126' % resistance)
+
+        w = self._widget_registry['MeasureTRise']
+        if not self._enable_measurement_trise:
+            w.setText('TRise:   ---   s')
+        elif not input_state:
+            w.setText('TRise:   N/A   s')
+        else:
+            w.setText(f'TRise: {trise:7.3f} s')
+
+        w = self._widget_registry['MeasureTFall']
+        if not self._enable_measurement_tfall:
+            w.setText('TFall:   ---   s')
+        elif not input_state:
+            w.setText('TFall:   N/A   s')
+        else:
+            w.setText(f'TFall: {tfall:7.3f} s')
+
+        if disch_time is not None:
+            m, s = divmod(disch_time, 60)
+            h, m = divmod(m, 60)
+            w = self._widget_registry['MeasureBattTime']
+            w.setText(f'{int(h):02d}:{int(m):02d}:{int(s):02}')
+            w = self._widget_registry['MeasureBattCap']
+            w.setText(f'{disch_cap:7.3f} Ah')
+            w = self._widget_registry['MeasureBattAddCap']
+            w.setText(f'Addl Cap: {add_cap:7.3f} Ah')
+            w = self._widget_registry['MeasureBattTotalCap']
+            w.setText(f'Total Cap: {total_cap:7.3f} Ah')
+
+        # Wait until all measurements have been made and then update the display
+        # widgets all at once so it looks like they were done simultaneously.
+        # Once we've gone through the whole measurement series, schedule it to
+        # run again soon.
+        QTimer.singleShot(self._measurement_interval,
+                          self._update_measurements_and_triggers)
 
     def get_measurements(self):
         """Return most recently cached measurements, if any."""

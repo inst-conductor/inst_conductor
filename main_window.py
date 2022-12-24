@@ -661,6 +661,7 @@ Copyright 2022, Robert S. French"""
                     measurement_display_widget.measurements_changed()
 
                 await self._update_widgets()
+        await config_widget.start_measurements() # Start the internal measurement loop
 
     def _menu_do_exit(self):
         """Perform the menu exit command."""
