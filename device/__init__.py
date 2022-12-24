@@ -43,11 +43,11 @@ class UnknownInstrumentType(Exception):
     pass
 
 
-def create_device(rm, resource_name, existing_names=None, **kwargs):
+async def create_device(resource_name, existing_names=None, **kwargs):
     """"Query a device for its IDN and create the appropriate instrument class."""
-    dev = Device4882(rm, resource_name)
-    dev.connect()
-    idn = dev.idn()
+    dev = Device4882(resource_name)
+    await dev.connect()
+    idn = await dev.idn()
     idn_split = idn.split(',')
     cls = None
     if len(idn_split) >= 2:
@@ -55,6 +55,6 @@ def create_device(rm, resource_name, existing_names=None, **kwargs):
         cls = _DEVICE_MAPPING.get((manufacturer, model), None)
     if cls is None:
         raise UnknownInstrumentType(idn)
-    new_dev = cls(rm, resource_name, existing_names=existing_names, **kwargs)
-    new_dev.connect(resource=dev._resource)
+    new_dev = cls(resource_name, existing_names=existing_names, **kwargs)
+    await new_dev.connect(reader=dev._reader, writer=dev._writer)
     return new_dev

@@ -21,6 +21,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ################################################################################
 
+import asyncio
 from collections import namedtuple
 import itertools
 import math
@@ -50,9 +51,11 @@ from PyQt6.QtWidgets import (QButtonGroup,
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence
 
+from qasync import asyncSlot, asyncClose
+from device.qasync_helper import asyncSlotSender
+
 import csv
 import numpy as np
-import pyvisa
 
 import device
 from plot_histogram_window import PlotHistogramWindow
@@ -114,9 +117,9 @@ class IPAddressDialog(QDialog):
 class MainWindow(QWidget):
     """The main window of the entire application."""
 
-    ResourceAttributes = namedtuple('ResourceAttributes', ['name', 'inst',
-                                                           'config_widget'])
-    def __init__(self, app, argv):
+    ResourceAttributes = namedtuple('ResourceAttributes',
+                                    ('name', 'inst', 'config_widget'))
+    def __init__(self, app):
         super().__init__()
         self.setWindowTitle('Instrument Conductor')
 
@@ -129,11 +132,13 @@ class MainWindow(QWidget):
                 self._style_env = 'windows'
 
         self.app = app
-        self.resource_manager = pyvisa.ResourceManager('@py')
 
-        # Tuple of ResourceAttributes
+        # Tuple of ResourceAttributes and associated lock
+        self._resources_lock = asyncio.Lock()
         self._open_resources = []
 
+        # Recorded measurements and triggers and associated lock
+        self._measurement_lock = asyncio.Lock()
         self._measurement_times = []
         self._measurements = {}
         self._measurement_units = {}
@@ -155,17 +160,10 @@ class MainWindow(QWidget):
         self._measurement_value_source = None
         self._measurement_value_op = '>'
         self._measurement_value_comp = 0
-        self._last_measurement_duration = 0
 
         self._widget_registry = {}
 
         self._init_widgets()
-
-        if len(argv) == 1:
-            self._menu_do_open_ip()
-        else:
-            for ip_address in argv[1:]:
-                self._open_ip(ip_address)
 
     def _init_widgets(self):
         """Initialize the top-level widgets."""
@@ -359,8 +357,6 @@ class MainWindow(QWidget):
         layoutv3.addWidget(self._widget_measurement_elapsed)
         self._widget_measurement_points = QLabel('# Data Points: 0')
         layoutv3.addWidget(self._widget_measurement_points)
-        self._widget_measurement_spent = QLabel('Last Measurement Duration: 0.000 s')
-        layoutv3.addWidget(self._widget_measurement_spent)
         layouth.addStretch()
         layoutv3 = QVBoxLayout()
         layouth.addLayout(layoutv3)
@@ -401,113 +397,134 @@ class MainWindow(QWidget):
         input = self.sender()
         self._measurement_timer.setInterval(int(input.value() * 1000))
 
-    def _on_erase_all(self):
+    @asyncSlot()
+    async def _on_erase_all(self):
         """Handle Erase All button."""
-        self._measurement_times = []
-        for key in self._measurements:
-            self._measurements[key] = []
-        self._measurement_last_good = True
-        for key in self._triggers:
-            self._triggers[key] = []
-        for measurement_display_widget in self._measurement_display_widgets:
-            measurement_display_widget.update()
+        async with self._measurement_lock:
+            self._measurement_times = []
+            for key in self._measurements:
+                self._measurements[key] = []
+            self._measurement_last_good = True
+            for key in self._triggers:
+                self._triggers[key] = []
+            for measurement_display_widget in self._measurement_display_widgets:
+                measurement_display_widget.update()
 
-    def _on_click_save_csv(self):
+    @asyncSlot()
+    async def _on_click_save_csv(self):
         """Handle Save CSV button."""
-        if len(self._measurement_times) == 0:
-            return
-        fn = QFileDialog.getSaveFileName(self, caption='Save Measurements as CSV',
-                                         filter='All (*.*);;CSV (*.csv)',
-                                         initialFilter='CSV (*.csv)')
+        fn = QFileDialog.getSaveFileName(self,
+                                            caption='Save Measurements as CSV',
+                                            filter='All (*.*);;CSV (*.csv)',
+                                            initialFilter='CSV (*.csv)')
         fn = fn[0]
         if not fn:
             return
-        with open(fn, 'w', newline='') as fp:
-            csvw = csv.writer(fp, )
-            header = ['Elapsed Time (s)', 'Absolute Time']
-            meas_used_keys = []
-            for key in self._measurements:
-                if np.all(np.isnan(self._measurements[key])):
-                    continue
-                meas_used_keys.append(key)
-                m_name = self._measurement_names[key]
-                m_unit = self._measurement_units[key]
-                m_unit = m_unit.replace('\u2126', 'ohm')
-                m_unit = m_unit.replace('\u00B5', 'micro')
-                label = f'{m_name} ({m_unit})'
-                header.append(label)
-            trig_used_keys = []
-            for key in self._triggers:
-                if np.all(np.isnan(self._triggers[key])):
-                    continue
-                trig_used_keys.append(key)
-                header.append(self._trigger_names[key])
-            csvw.writerow(header)
-            for idx, time_ in enumerate(self._measurement_times):
-                row = [time_ - self._measurement_times[0]]
-                timestr = time.strftime('%Y/%m/%d %H:%M:%S',
-                                        time.localtime(time_))
-                row.append(timestr)
-                for key in meas_used_keys:
-                    meas = self._measurements[key][idx]
-                    if np.isnan(meas):
-                        row.append('')
-                    else:
-                        row.append(meas)
-                for key in trig_used_keys:
-                    trig = self._triggers[key][idx]
-                    if np.isnan(trig):
-                        row.append('')
-                    else:
-                        row.append(trig)
-                csvw.writerow(row)
+        async with self._measurement_lock:
+            if len(self._measurement_times) == 0:
+                return
+            with open(fn, 'w', newline='') as fp:
+                csvw = csv.writer(fp, )
+                header = ('Elapsed Time (s)', 'Absolute Time')
+                meas_used_keys = []
+                for key in self._measurements:
+                    if np.all(np.isnan(self._measurements[key])):
+                        continue
+                    meas_used_keys.append(key)
+                    m_name = self._measurement_names[key]
+                    m_unit = self._measurement_units[key]
+                    m_unit = m_unit.replace('\u2126', 'ohm')
+                    m_unit = m_unit.replace('\u00B5', 'micro')
+                    label = f'{m_name} ({m_unit})'
+                    header.append(label)
+                trig_used_keys = []
+                for key in self._triggers:
+                    if np.all(np.isnan(self._triggers[key])):
+                        continue
+                    trig_used_keys.append(key)
+                    header.append(self._trigger_names[key])
+                csvw.writerow(header)
+                for idx, time_ in enumerate(self._measurement_times):
+                    row = [time_ - self._measurement_times[0]]
+                    timestr = time.strftime('%Y/%m/%d %H:%M:%S',
+                                            time.localtime(time_))
+                    row.append(timestr)
+                    for key in meas_used_keys:
+                        meas = self._measurements[key][idx]
+                        if np.isnan(meas):
+                            row.append('')
+                        else:
+                            row.append(meas)
+                    for key in trig_used_keys:
+                        trig = self._triggers[key][idx]
+                        if np.isnan(trig):
+                            row.append('')
+                        else:
+                            row.append(trig)
+                    csvw.writerow(row)
 
-    def _on_click_acquisition_mode(self):
+    @asyncSlotSender()
+    async def _on_click_acquisition_mode(self, rb):
         """Handle Measurement Mode radio buttons."""
-        rb = self.sender()
         if not rb.isChecked():
             return
-        self._acquisition_mode = rb.wid
-        self._check_acquisition_ready()
-        self._update_widgets()
+        async with self._measurement_lock:
+            async with self._resources_lock:
+                self._acquisition_mode = rb.wid
+                await self._check_acquisition_ready()
+                await self._update_widgets()
 
-    def _on_select_meas_state_source(self, sel):
+    @asyncSlotSender()
+    async def _on_select_meas_state_source(self, combo, sel):
         """Handle Instrument State source selection."""
-        combo = self.sender()
-        self._measurement_state_source = combo.itemData(sel)
-        self._check_acquisition_ready()
-        self._update_widgets()
+        async with self._measurement_lock:
+            async with self._resources_lock:
+                self._measurement_state_source = combo.itemData(sel)
+                await self._check_acquisition_ready()
+                await self._update_widgets()
 
-    def _on_select_meas_value_source(self, sel):
+    @asyncSlotSender()
+    async def _on_select_meas_value_source(self, combo, sel):
         """Handle Measurement Value source selection."""
-        combo = self.sender()
-        self._measurement_value_source = combo.itemData(sel)
-        self._check_acquisition_ready()
-        self._update_widgets()
+        async with self._measurement_lock:
+            async with self._resources_lock:
+                self._measurement_value_source = combo.itemData(sel)
+                await self._check_acquisition_ready()
+                await self._update_widgets()
 
-    def _on_select_meas_value_op(self, sel):
+    @asyncSlot()
+    async def _on_select_meas_value_op(self, combo, sel):
         """Handle Measurement Value operator selection."""
-        combo = self.sender()
-        self._measurement_value_op = combo.itemData(sel)
-        self._check_acquisition_ready()
-        self._update_widgets()
+        async with self._measurement_lock:
+            async with self._resources_lock:
+                self._measurement_value_op = combo.itemData(sel)
+                await self._check_acquisition_ready()
+                await self._update_widgets()
 
-    def _on_value_changed_meas_comp(self):
+    @asyncSlotSender()
+    async def _on_value_changed_meas_comp(self, input):
         """Handle Measurement Value comparison value changed."""
-        input = self.sender()
-        self._measurement_value_comp = input.value()
-        self._check_acquisition_ready()
-        self._update_widgets()
+        async with self._measurement_lock:
+            async with self._resources_lock:
+                self._measurement_value_comp = input.value()
+                await self._check_acquisition_ready()
+                await self._update_widgets()
 
-    def _on_click_go(self):
+    @asyncSlot()
+    async def _on_click_go(self):
         """Handle Go button."""
-        self._user_paused = False
-        self._update_widgets()
+        async with self._measurement_lock:
+            async with self._resources_lock:
+                self._user_paused = False
+                await self._update_widgets()
 
-    def _on_click_pause(self):
+    @asyncSlot()
+    async def _on_click_pause(self):
         """Handle Go button."""
-        self._user_paused = True
-        self._update_widgets()
+        async with self._measurement_lock:
+            async with self._resources_lock:
+                self._user_paused = True
+                await self._update_widgets()
 
     def _refresh_menubar_device_recent_resources(self):
         """Update the text in the Recent Resources actions."""
@@ -524,16 +541,18 @@ class MainWindow(QWidget):
             else:
                 action.setVisible(False)
 
-    def _menu_do_about(self):
+    @asyncSlot()
+    async def _menu_do_about(self):
         """Show the About box."""
-        # Group the instruments by first three characters (e.g. SDL, SDP)
-        supported = '\n'.join([', '.join(y) for y in
-                               [list(x[1]) for x in
-                                itertools.groupby(device.SUPPORTED_INSTRUMENTS,
-                                                  lambda x: x[:3])]])
-        open = '\n'.join(
-            [f'{x.inst.resource_name} - {x[1].model}, S/N {x[1].serial_number}, '
-             f'FW {x.inst.firmware_version}' for x in self._open_resources])
+        async with self._resources_lock:
+            # Group the instruments by first three characters (e.g. SDL, SDP)
+            supported = '\n'.join([', '.join(y) for y in
+                                [list(x[1]) for x in
+                                      itertools.groupby(device.SUPPORTED_INSTRUMENTS,
+                                                        lambda x: x[:3])]])
+            open = '\n'.join(
+                [f'{x.inst.resource_name} - {x[1].model}, S/N {x[1].serial_number}, '
+                f'FW {x.inst.firmware_version}' for x in self._open_resources])
         if open == '':
             open = 'None'
         msg = f"""Welcome to Instrument Conductor, a uniform controller for \
@@ -548,93 +567,100 @@ Currently open resources:
 Copyright 2022, Robert S. French"""
         QMessageBox.about(self, 'About', msg)
 
-    def _menu_do_open_ip(self):
+    @asyncSlot()
+    async def _menu_do_open_ip(self):
         """Open a device based on an entered IP address."""
         dialog = IPAddressDialog(self)
         dialog.setWindowTitle('Connect to Instrument Using IP Address')
         if not dialog.exec():
             return
         ip_address = dialog.get_ip_address()
-        self._open_ip(ip_address)
+        await self._open_ip(ip_address)
 
-    def _menu_do_open_recent(self, idx):
+    @asyncSlotSender()
+    async def _menu_do_open_recent(self, action):
         """Open a resource from the Recent Resource list."""
-        action = self.sender()
-        self._open_resource(self._recent_resources[action.resource_number])
+        # We don't bother to lock on the resource list here because there's
+        # only a single access to it and nothing can interrupt in the middle.
+        await self._open_resource(self._recent_resources[action.resource_number])
 
-    def _open_ip(self, ip_address):
+    @asyncSlot()
+    async def _open_ip(self, ip_address):
         """Open a device based on the given IP address."""
         # Reformat into a standard form, removing any zeroes
         ip_address = '.'.join([('%d' % int(x)) for x in ip_address.split('.')])
-        self._open_resource(f'TCPIP::{ip_address}')
+        await self._open_resource(f'TCPIP::{ip_address}')
 
-    def _open_resource(self, resource_name):
+    async def _open_resource(self, resource_name):
         """Open a resource by name."""
         if resource_name in [x.name for x in self._open_resources]:
             QMessageBox.critical(self, 'Error',
-                                 f'Resource "{resource_name}" is already open!')
+                                       f'Resource "{resource_name}" is already open!')
             return
 
         # Create the device
         try:
-            inst = device.create_device(self.resource_manager, resource_name,
-                                        existing_names=self.device_names)
-        except pyvisa.errors.VisaIOError as ex:
-            QMessageBox.critical(self, 'Error',
-                                 f'Failed to open "{resource_name}":\n{ex.description}')
-            return
+            inst = await device.create_device(resource_name,
+                                              existing_names=self.device_names)
+        # except pyvisa.errors.VisaIOError as ex: XXX
+        #     QMessageBox.critical(self, 'Error',
+        #                          f'Failed to open "{resource_name}":\n{ex.description}')
+        #     return
         except device.UnknownInstrumentType as ex:
             QMessageBox.critical(self, 'Error',
-                                 f'Unknown instrument type "{ex.args[0]}"')
+                                       f'Unknown instrument type "{ex.args[0]}"')
             return
 
         config_widget = None
         inst.set_debug(True)
-        inst.connect()
+        await inst.connect()
         config_widget = inst.configure_widget(self)
         config_widget.show()
-        self._open_resources.append(self.ResourceAttributes(
-            name=resource_name, inst=inst, config_widget=config_widget))
+        await config_widget.refresh()
+        async with self._measurement_lock:
+            async with self._resources_lock:
+                self._open_resources.append(self.ResourceAttributes(
+                    name=resource_name, inst=inst, config_widget=config_widget))
+                # Update the recent resource list and put this resource on top
+                try:
+                    idx = self._recent_resources.index(resource_name)
+                except ValueError:
+                    pass
+                else:
+                    del self._recent_resources[idx]
+                self._recent_resources.insert(0, resource_name)
+                self._recent_resources = self._recent_resources[
+                    :self._max_recent_resources]
+                self._refresh_menubar_device_recent_resources()
 
-        # Update the recent resource list and put this resource on top
-        try:
-            idx = self._recent_resources.index(resource_name)
-        except ValueError:
-            pass
-        else:
-            del self._recent_resources[idx]
-        self._recent_resources.insert(0, resource_name)
-        self._recent_resources = self._recent_resources[:self._max_recent_resources]
-        self._refresh_menubar_device_recent_resources()
+                # Update the measurement list with newly available measurements
+                num_existing = len(self._measurement_times)
+                measurements = config_widget.get_measurements()
+                triggers = config_widget.get_triggers()
+                for meas_key, meas in measurements.items():
+                    name = meas['name']
+                    key = (inst.long_name, meas_key)
+                    if key not in self._measurements:
+                        # We skip creation of new measurements if the key is already
+                        # there. This happens if the instrument exists before, was
+                        # deleted, and then is opened again.
+                        self._measurements[key] = [math.nan] * num_existing
+                        self._measurement_units[key] = meas['unit']
+                        self._measurement_formats[key] = meas['format']
+                        self._measurement_names[key] = f'{inst.name}: {name}'
+                for trig_key, trig in triggers.items():
+                    name = trig['name']
+                    key = (inst.long_name, trig_key)
+                    if key not in self._triggers:
+                        # We skip creation of new triggers if the key is already there.
+                        # This happens if the instrument exists before, was deleted, and
+                        # then is opened again.
+                        self._triggers[key] = [math.nan] * num_existing
+                        self._trigger_names[key] = f'{inst.name}: {name}'
+                for measurement_display_widget in self._measurement_display_widgets:
+                    measurement_display_widget.measurements_changed()
 
-        # Update the measurement list with newly available measurements
-        num_existing = len(self._measurement_times)
-        measurements, triggers = config_widget.update_measurements_and_triggers(
-            read_inst=False)
-        for meas_key, meas in measurements.items():
-            name = meas['name']
-            key = (inst.long_name, meas_key)
-            if key not in self._measurements:
-                # We skip creation of new measurements if the key is already there.
-                # This happens if the instrument exists before, was deleted, and then
-                # is opened again.
-                self._measurements[key] = [math.nan] * num_existing
-                self._measurement_units[key] = meas['unit']
-                self._measurement_formats[key] = meas['format']
-                self._measurement_names[key] = f'{inst.name}: {name}'
-        for trig_key, trig in triggers.items():
-            name = trig['name']
-            key = (inst.long_name, trig_key)
-            if key not in self._triggers:
-                # We skip creation of new triggers if the key is already there.
-                # This happens if the instrument exists before, was deleted, and then
-                # is opened again.
-                self._triggers[key] = [math.nan] * num_existing
-                self._trigger_names[key] = f'{inst.name}: {name}'
-        for measurement_display_widget in self._measurement_display_widgets:
-            measurement_display_widget.measurements_changed()
-
-        self._update_widgets()
+                await self._update_widgets()
 
     def _menu_do_exit(self):
         """Perform the menu exit command."""
@@ -673,11 +699,11 @@ Copyright 2022, Robert S. French"""
         self._widget_measurement_elapsed.setText(msg2)
         npts = len(self._measurement_times)
         self._widget_measurement_points.setText(f'# Data Points: {npts}')
-        self._widget_measurement_spent.setText(
-            f'Last Measurement Duration: {self._last_measurement_duration:.3f} s')
 
-    def _check_acquisition_ready(self):
-        """Check to see if the current acquisition trigger is met."""
+    async def _check_acquisition_ready(self):
+        """Check to see if the current acquisition trigger is met.
+
+        Should be called within both _resources_locak and _measurement_lock."""
         match self._acquisition_mode:
             case 'Manual':
                 self._acquisition_ready = True
@@ -685,7 +711,8 @@ Copyright 2022, Robert S. French"""
             case 'State':
                 for ra in self._open_resources:
                     if ra.config_widget is not None:
-                        for trigger_key, trigger in ra.config_widget.get_triggers().items():
+                        triggers = ra.config_widget.get_triggers()
+                        for trigger_key, trigger in triggers.items():
                             key = (ra.inst.long_name, trigger_key)
                             if key == self._measurement_state_source:
                                 self._acquisition_ready = trigger['val']
@@ -726,100 +753,98 @@ Copyright 2022, Robert S. French"""
             case _:
                 assert False, self._acquisition_mode
 
-    def _update_measurements(self):
+    @asyncSlot()
+    async def _update_measurements(self):
         """Query all instruments and update all measurements and display widgets."""
         # Although technically each measurement takes place at a different time,
         # it's important that we treat each measurement group as being at a single
         # time so we can match up measurements in X/Y plots and file saving.
         if len(self._open_resources) == 0:
             return
-        start_time = time.time()
-        # First update all the cached measurements and config widget displays
-        for ra in self._open_resources:
-            if ra.config_widget is not None:
-                ra.config_widget.update_measurements_and_triggers()
-        end_time = time.time()
-        self._last_measurement_duration = end_time - start_time
-        # Check for the current trigger condition
-        self._check_acquisition_ready()
-        self._update_acquisition_indicator()
-        force_nan = False
-        if not self._acquisition_ready or self._user_paused:
-            if self._measurement_last_good:
-                # We need to insert a fake set of NaNs so there will be a break in the
-                # line graphs when plotting
-                force_nan = True
-            else:
-                return
-        cur_time = time.time()
-        self._measurement_times.append(cur_time)
-        # Now go through and read all the cached measurements
-        meas_updated_keys = []
-        trig_updated_keys = []
-        for ra in self._open_resources:
-            if ra.config_widget is not None:
-                measurements = ra.config_widget.get_measurements()
-                for meas_key, meas in measurements.items():
-                    name = meas['name']
-                    key = (ra.inst.long_name, meas_key)
-                    meas_updated_keys.append(key)
-                    if key not in self._measurements:
-                        self._measurements[key] = ([math.nan] *
-                                                   len(self._measurement_times))
-                        self._measurement_units[key] = meas['unit']
-                        self._measurement_formats[key] = meas['format']
-                        self._measurement_names[key] = f'{ra.inst.name}: {name}'
-                    if force_nan:
-                        val = math.nan
+        async with self._measurement_lock:
+            async with self._resources_lock:
+                # Check for the current trigger condition
+                await self._check_acquisition_ready()
+                self._update_acquisition_indicator()
+                force_nan = False
+                if not self._acquisition_ready or self._user_paused:
+                    if self._measurement_last_good:
+                        # We need to insert a fake set of NaNs so there will be a break
+                        # in the line graphs when plotting
+                        force_nan = True
                     else:
-                        val = meas['val']
-                        if val is None:
-                            val = math.nan
-                    self._measurements[key].append(val)
-                    # The user can change the short name
-                    self._measurement_names[key] = f'{ra.inst.name}: {name}'
-                triggers = ra.config_widget.get_triggers()
-                for trig_key, trig in triggers.items():
-                    name = trig['name']
-                    key = (ra.inst.long_name, trig_key)
-                    trig_updated_keys.append(key)
-                    if key not in self._triggers:
-                        self._triggers[key] = ([math.nan] *
-                                               len(self._measurement_times))
-                        self._trigger_names[key] = f'{ra.inst.name}: {name}'
-                    if force_nan:
-                        val = math.nan
-                    else:
-                        val = trig['val']
-                        if val is None:
-                            val = math.nan
-                    self._triggers[key].append(val)
-                    # The user can change the short name
-                    self._trigger_names[key] = f'{ra.inst.name}: {name}'
-        if len(meas_updated_keys) > 0:
-            # As long as we updated at least one real instrument, then go through
-            # the measurement list and see which instruments we didn't update. This
-            # happens because those instruments were closed and no longer exist. But
-            # to keep everything happy all measurements need to be the same length,
-            # so we add on NaNs.
-            for key in self._measurements:
-                if key not in meas_updated_keys:
-                    self._measurements[key].append(math.nan)
-        if len(trig_updated_keys) > 0:
-            # As long as we updated at least one real instrument, then go through
-            # the trigger list and see which instruments we didn't update. This
-            # happens because those instruments were closed and no longer exist. But
-            # to keep everything happy all triggers need to be the same length,
-            # so we add on NaNs.
-            for key in self._triggers:
-                if key not in trig_updated_keys:
-                    self._triggers[key].append(math.nan)
-        self._measurement_last_good = not force_nan
-        for measurement_display_widget in self._measurement_display_widgets:
-            measurement_display_widget.update()
+                        return
+                cur_time = time.time()
+                self._measurement_times.append(cur_time)
+                # Now go through and read all the cached measurements
+                meas_updated_keys = []
+                trig_updated_keys = []
+                for ra in self._open_resources:
+                    if ra.config_widget is not None:
+                        measurements = ra.config_widget.get_measurements()
+                        for meas_key, meas in measurements.items():
+                            name = meas['name']
+                            key = (ra.inst.long_name, meas_key)
+                            meas_updated_keys.append(key)
+                            if key not in self._measurements:
+                                self._measurements[key] = ([math.nan] *
+                                                        len(self._measurement_times))
+                                self._measurement_units[key] = meas['unit']
+                                self._measurement_formats[key] = meas['format']
+                                self._measurement_names[key] = f'{ra.inst.name}: {name}'
+                            if force_nan:
+                                val = math.nan
+                            else:
+                                val = meas['val']
+                                if val is None:
+                                    val = math.nan
+                            self._measurements[key].append(val)
+                            # The user can change the short name
+                            self._measurement_names[key] = f'{ra.inst.name}: {name}'
+                        triggers = ra.config_widget.get_triggers()
+                        for trig_key, trig in triggers.items():
+                            name = trig['name']
+                            key = (ra.inst.long_name, trig_key)
+                            trig_updated_keys.append(key)
+                            if key not in self._triggers:
+                                self._triggers[key] = ([math.nan] *
+                                                    len(self._measurement_times))
+                                self._trigger_names[key] = f'{ra.inst.name}: {name}'
+                            if force_nan:
+                                val = math.nan
+                            else:
+                                val = trig['val']
+                                if val is None:
+                                    val = math.nan
+                            self._triggers[key].append(val)
+                            # The user can change the short name
+                            self._trigger_names[key] = f'{ra.inst.name}: {name}'
+                if len(meas_updated_keys) > 0:
+                    # As long as we updated at least one real instrument, then go through
+                    # the measurement list and see which instruments we didn't update.
+                    # This happens because those instruments were closed and no longer
+                    # exist. But to keep everything happy all measurements need to be the
+                    # same length, so we add on NaNs.
+                    for key in self._measurements:
+                        if key not in meas_updated_keys:
+                            self._measurements[key].append(math.nan)
+                if len(trig_updated_keys) > 0:
+                    # As long as we updated at least one real instrument, then go through
+                    # the trigger list and see which instruments we didn't update. This
+                    # happens because those instruments were closed and no longer exist.
+                    # But to keep everything happy all triggers need to be the same
+                    # length, so we add on NaNs.
+                    for key in self._triggers:
+                        if key not in trig_updated_keys:
+                            self._triggers[key].append(math.nan)
+                self._measurement_last_good = not force_nan
+                for measurement_display_widget in self._measurement_display_widgets:
+                    measurement_display_widget.update()
 
-    def _update_widgets(self):
-        """Update our widgets with current information."""
+    async def _update_widgets(self):
+        """Update our widgets with current information.
+
+        Should be called within both _resources_lock and _measurement_lock."""
         state_combo = self._widget_registry['InstrumentStateCombo']
         state_combo.clear()
         val_src_combo = self._widget_registry['MeasurementValueSourceCombo']
@@ -840,7 +865,8 @@ Copyright 2022, Robert S. French"""
         measurement_index = 0
         for ra in self._open_resources:
             if ra.config_widget is not None:
-                for trigger_key, trigger in ra.config_widget.get_triggers().items():
+                triggers = ra.config_widget.get_triggers()
+                for trigger_key, trigger in triggers.items():
                     trig_name = trigger['name']
                     name = f'{ra.inst.name}: {trig_name}'
                     key = (ra.inst.long_name, trigger_key)
@@ -850,7 +876,8 @@ Copyright 2022, Robert S. French"""
                     if key == self._measurement_state_source:
                         trigger_found = trigger_index
                     trigger_index += 1
-                for meas_key, measurement in ra.config_widget.get_measurements().items():
+                measurements = ra.config_widget.get_measurements()
+                for meas_key, measurement in measurements.items():
                     meas_name = measurement['name']
                     name = f'{ra.inst.name}: {meas_name}'
                     key = (ra.inst.long_name, meas_key)
@@ -910,53 +937,61 @@ Copyright 2022, Robert S. French"""
         """Return a list of all device names currently open."""
         return [x.inst.name for x in self._open_resources]
 
-    def device_renamed(self, config_widget):
+    async def device_renamed(self, config_widget):
         """Called when a device configuration window is renamed by the user."""
-        measurements = config_widget.get_measurements()
-        triggers = config_widget.get_triggers()
-        long_name = config_widget._inst.long_name
-        inst_name = config_widget._inst.name
-        for meas_key, meas in measurements.items():
-            name = meas['name']
-            key = (long_name, meas_key)
-            self._measurement_names[key] = f'{inst_name}: {name}'
-        for trig_key, trig in triggers.items():
-            name = trig['name']
-            key = (long_name, trig_key)
-            self._trigger_names[key] = f'{inst_name}: {name}'
-        self._update_widgets()
-        for widget in self._measurement_display_widgets:
-            widget.measurements_changed()
+        async with self._measurement_lock:
+            async with self._resources_lock: # For _update_widgets
+                measurements = config_widget.get_measurements()
+                triggers = config_widget.get_triggers()
+                long_name = config_widget._inst.long_name
+                inst_name = config_widget._inst.name
+                for meas_key, meas in measurements.items():
+                    name = meas['name']
+                    key = (long_name, meas_key)
+                    self._measurement_names[key] = f'{inst_name}: {name}'
+                for trig_key, trig in triggers.items():
+                    name = trig['name']
+                    key = (long_name, trig_key)
+                    self._trigger_names[key] = f'{inst_name}: {name}'
 
-    def closeEvent(self, event):
-        """Handle the user closing the main wnidow."""
+                await self._update_widgets()
+
+                for widget in self._measurement_display_widgets:
+                    widget.measurements_changed()
+
+    @asyncClose
+    async def closeEvent(self, event):
+        """Handle the user closing the main window."""
         # Close all the sub-windows, allowing them to shut down peacefully
         # Closing a config window also removes it from the open resources list,
         # so we have to make a copy of the list before iterating.
-        for ra in self._open_resources[:]:
-            ra.config_widget.close()
+        async with self._resources_lock:
+            for ra in self._open_resources[:]:
+                ra.config_widget.close()
         for widget in self._measurement_display_widgets:
             widget.close()
 
-    def device_window_closed(self, inst):
+    async def device_window_closed(self, inst):
         """Update internal state when one of the configuration widgets is closed."""
-        idx = [x.name for x in self._open_resources].index(inst.resource_name)
-        del self._open_resources[idx]
-        self._refresh_menubar_device_recent_resources()
+        async with self._resources_lock:
+            async with self._measurement_lock:
+                idx = [x.name for x in self._open_resources].index(inst.resource_name)
+                del self._open_resources[idx]
+                self._refresh_menubar_device_recent_resources()
         # for key in list(self._measurements): # Need list because we're modifying keys
         #     if key[0] == inst.long_name:
         #         del self._measurements[key]
         #         del self._measurement_names[key]
         #         del self._measurement_units[key]
 
-        for measurement_display_widget in self._measurement_display_widgets:
-            measurement_display_widget.measurements_changed()
+                for measurement_display_widget in self._measurement_display_widgets:
+                    measurement_display_widget.measurements_changed()
 
-        if (self._measurement_state_source is not None and
-                self._measurement_state_source[0] == inst.long_name):
-            self._measurement_state_source = None
-        if (self._measurement_value_source is not None and
-                self._measurement_value_source[0] == inst.long_name):
-            self._measurement_value_source = None
+                if (self._measurement_state_source is not None and
+                        self._measurement_state_source[0] == inst.long_name):
+                    self._measurement_state_source = None
+                if (self._measurement_value_source is not None and
+                        self._measurement_value_source[0] == inst.long_name):
+                    self._measurement_value_source = None
 
-        self._update_widgets()
+                await self._update_widgets()

@@ -108,10 +108,11 @@ class InstrumentSiglentSDM3000(Device4882):
         super().__init__(*args, **kwargs)
         super().init_names('SDM3000', 'SDM', existing_names)
 
-    def connect(self, *args, **kwargs):
+    async def connect(self, *args, **kwargs):
         """Connect to the instrument and set it to remote state."""
         super().connect(*args, **kwargs)
-        idn = self.idn().split(',')
+        idn = await self.idn()
+        idn = idn.split(',')
         if len(idn) != 4:
             assert ValueError
         (self._manufacturer,

@@ -87,9 +87,10 @@ class InstrumentSiglentSPD3303(Device4882):
         super().__init__(*args, **kwargs)
         super().init_names('SPD3303', 'SPD', existing_names)
 
-    def connect(self, *args, **kwargs):
+    async def connect(self, *args, **kwargs):
         super().connect(*args, **kwargs)
-        idn = self.idn().split(',')
+        idn = await self.idn()
+        idn = idn.split(',')
         if len(idn) != 4:
             assert ValueError
         (self._manufacturer,

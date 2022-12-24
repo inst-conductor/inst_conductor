@@ -42,9 +42,13 @@ from PyQt6.QtCore import Qt, QAbstractTableModel, QTimer
 from PyQt6.QtGui import QAction, QColor
 from PyQt6.QtPrintSupport import QPrintDialog
 
+from qasync import asyncSlot, asyncClose
+
 
 class ConfigureWidgetBase(QWidget):
-    """The base class for all instrument configuration widgets."""
+    """The base class for all instrument configuration widgets.
+
+    Must call refresh after instance creation."""
     def __init__(self, main_window, instrument):
         super().__init__()
         self._style_env = main_window._style_env
@@ -53,15 +57,14 @@ class ConfigureWidgetBase(QWidget):
         self._statusbar = None
         self._init_widgets()
         self.show() # Do this here so all the widgets get their sizes before being hidden
-        self.refresh()
 
     ### The following functions must be implemented by all configuration widgets.
 
-    def refresh(self):
+    async def refresh(self):
         """Reload the UI state from the instrument state."""
         raise NotImplementedError
 
-    def update_measurements_and_triggers(self):
+    async def update_measurements_and_triggers(self):
         """Read current values, update control panel display, return the values."""
         raise NotImplementedError
 
@@ -170,11 +173,12 @@ class ConfigureWidgetBase(QWidget):
         """Execute Help:About menu option."""
         raise NotImplementedError
 
-    def closeEvent(self, event):
+    @asyncClose
+    async def closeEvent(self, event):
         """Handle window close event by disconnecting from the instrument."""
-        self._inst.disconnect()
+        await self._inst.disconnect()
         # Notify the main widget so that all of the UI lists and whatnot can be updated.
-        self._main_window.device_window_closed(self._inst)
+        await self._main_window.device_window_closed(self._inst)
 
 
 class PrintableTextDialog(QDialog):

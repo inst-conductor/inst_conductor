@@ -22,7 +22,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ################################################################################
 
-import pyvisa
+
+import asyncio
 
 
 class NotConnectedError(Exception):
@@ -35,8 +36,7 @@ class ContactLostError(Exception):
 
 class Device(object):
     """Class representing any generic device accessible through VISA."""
-    def __init__(self, resource_manager, resource_name):
-        self._resource_manager = resource_manager
+    def __init__(self, resource_name):
         self._resource_name = resource_name
         self._long_name = resource_name
         self._name = resource_name
@@ -48,6 +48,7 @@ class Device(object):
         self._firmware_version = None
         self._hardware_version = None
         self._debug = False
+        self._io_lock = asyncio.Lock()
 
     @property
     def manufacturer(self):
@@ -98,19 +99,22 @@ class Device(object):
         """Return a list of supported instrument models."""
         raise NotImplementedError
 
-    def connect(self, resource=None):
+    async def connect(self, reader=None, writer=None):
         """Open the connection to the device."""
         if self._connected:
             return
-        if resource is not None:
-            self._resource = resource
+        if reader is not None or writer is not None:
+            self._reader, self._writer = reader, writer
+            self._connected = True
+        elif self._resource_name.startswith('TCPIP::'):
+            ip_addr = self._resource_name.replace('TCPIP::', '')
+            self._reader, self._writer = await asyncio.open_connection(ip_addr, 5025)
+            self._connected = True
+            if self._debug:
+                print(f'Connected to {self._resource_name}')
         else:
-            self._resource = self._resource_manager.open_resource(self._resource_name)
-            self._resource.read_termination = '\n'
-            self._resource.write_termination = '\n'
-        self._connected = True
-        if self._debug:
-            print(f'Connected to {self._resource_name}')
+            print(f'Bad resource name {self._resource_name}')
+            return
 
     def init_names(self, long_pfx, short_pfx, existing_names):
         """Initialize long and short names and ensure uniqueness."""
@@ -132,99 +136,118 @@ class Device(object):
 
     ### Direct access to pyvisa functions
 
-    def disconnect(self):
+    async def disconnect(self):
         """Close the connection to the device."""
         if not self._connected:
             raise NotConnectedError
-        try:
-            self._resource.close()
-        except pyvisa.errors.VisaIOError:
-            pass
+        self._writer.close()
+        await self._writer.wait_closed()
         self._connected = False
         if self._debug:
             print(f'Disconnected from {self._resource_name}')
 
-    def query(self, s, timeout=None):
+    async def query(self, s, timeout=None):
         """VISA query, write then read."""
         if not self._connected:
             raise NotConnectedError
-        old_timeout = self._resource.timeout
-        if timeout is not None:
-            self._resource.timeout = timeout
-        try:
-            ret = self._resource.query(s).strip(' \t\r\n')
-        except pyvisa.errors.VisaIOError:
-            self.disconnect()
-            if self._debug:
-                print(f'query "{s}" resulted in disconnect')
-            raise ContactLostError
-        self._resource.timeout = old_timeout
+        # try:
+        async with self._io_lock:
+            # Write and Read have to be adjacent to each other
+            await self.write_no_lock(s)
+            ret = await self.read_no_lock()
+        ret = ret.strip(' \t\r\n')
+        # except pyvisa.errors.VisaIOError:
+        #     self.disconnect()
+        #     if self._debug:
+        #         print(f'query "{s}" resulted in disconnect')
+        #     raise ContactLostError
         if self._debug:
             print(f'query "{s}" returned "{ret}"')
         return ret
 
-    def read(self):
-        """VISA read, strips termination characters."""
+    async def read_no_lock(self):
+        """VISA read, strips termination characters. No locking."""
         if not self._connected:
             raise NotConnectedError
-        try:
-            ret = self._resource.read().strip(' \t\r\n')
-        except pyvisa.errors.VisaIOError:
-            self.disconnect()
-            raise ContactLostError
+        # try:
+        ret = await self._reader.readline()
+        ret = ret.decode().strip(' \t\r\n')
+        # except pyvisa.errors.VisaIOError:
+        #     self.disconnect()
+        #     raise ContactLostError
+        return ret
+
+    async def read(self):
+        """VISA read, strips termination characters."""
+        async with self._io_lock:
+            ret = await self._read_no_lock()
         if self._debug:
             print(f'read returned "{ret}"')
         return ret
 
-    def read_raw(self):
+    async def read_raw(self):
         """VISA read_raw."""
         if not self._connected:
             raise NotConnectedError
-        try:
-            ret = self._resource.read_raw()
-        except pyvisa.errors.VisaIOError:
-            self.disconnect()
-            raise ContactLostError
+        # try:
+        async with self._io_lock:
+            ret = await self._reader.readline()
+        ret = ret.decode()
+        # except pyvisa.errors.VisaIOError:
+        #     self.disconnect()
+        #     raise ContactLostError
         if self._debug:
             print(f'read_raw returned "{ret}"')
         return ret
 
-    def write(self, s, timeout=None):
-        """VISA write, appending termination characters. Timeout override is in ms."""
+    async def write_no_lock(self, s):
+        """VISA write, appending termination characters. No locking."""
         if not self._connected:
             raise NotConnectedError
-        old_timeout = self._resource.timeout
-        if timeout is not None:
-            self._resource.timeout = timeout
+        # try:
+        self._writer.write((s+'\n').encode())
+        await self._writer.drain()
+        # except pyvisa.errors.VisaIOError:
+        #     self.disconnect()
+        #     raise ContactLostError
+        # self._resource.timeout = old_timeout
+
+    async def write(self, s):
+        """VISA write, appending termination characters."""
+        if not self._connected:
+            raise NotConnectedError
         if self._debug:
             print(f'write "{s}"')
-        try:
-            self._resource.write(s)
-        except pyvisa.errors.VisaIOError:
-            self.disconnect()
-            raise ContactLostError
-        self._resource.timeout = old_timeout
+        # try:
+        async with self._io_lock:
+            self._writer.write((s+'\n').encode())
+            await self._writer.drain()
+        # except pyvisa.errors.VisaIOError:
+        #     self.disconnect()
+        #     raise ContactLostError
+        # self._resource.timeout = old_timeout
 
-    def write_raw(self, s):
+    async def write_raw(self, s):
         """VISA write, no termination characters."""
         if not self._connected:
             raise NotConnectedError
         if self._debug:
             print(f'write_raw "{s}"')
-        try:
-            self._resource.write(s)
-        except pyvisa.errors.VisaIOError:
-            self.disconnect()
-            raise ContactLostError
+        # try:
+        self._writer.write(s.encode())
+        await self._writer.drain()
+        # except pyvisa.errors.VisaIOError:
+        #     self.disconnect()
+        #     raise ContactLostError
 
     ### Internal support routines
 
-    def _read_write(self, query, write, validator=None, value=None):
+    async def _read_write(self, query, write, validator=None, value=None):
         if value is None:
-            return self._resource.query(query)
+            return await self.query(query)
         if validator is not None:
             validator(value)
-        self._resource.write(f'{write} {value}')
+        await self.write(f'{write} {value}')
         return None
 
     def _validator_1(self, value):
@@ -245,51 +268,51 @@ class Device4882(Device):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def idn(self):
+    async def idn(self):
         """Read instrument identification."""
-        return self.query('*IDN?')
+        return await self.query('*IDN?')
 
-    def rst(self):
+    async def rst(self):
         """Return to the instrument's default state."""
         self.write('*RST')
-        self.cls()
+        await self.cls()
 
-    def cls(self):
+    async def cls(self):
         """Clear all event registers and the error list."""
-        self.write('*CLS')
+        await self.write('*CLS')
 
-    def ese(self, reg_value=None):
+    async def ese(self, reg_value=None):
         """Read or write the standard event status enable register."""
-        return self._read_write('*ESE?', '*ESE', self._validator_8, reg_value)
+        return await self._read_write('*ESE?', '*ESE', self._validator_8, reg_value)
 
-    def esr(self):
+    async def esr(self):
         """Read and clear the standard event status enable register."""
-        return self.query('*ESR?')
+        return await self.query('*ESR?')
 
-    def send_opc(self):
+    async def send_opc(self):
         """"Set bit 0 in ESR when all ops have finished."""
-        self.write('*OPC')
+        await self.write('*OPC')
 
-    def get_opc(self):
+    async def get_opc(self):
         """"Query if current operation finished."""
-        return self.query('*OPC?')
+        return await self.query('*OPC?')
 
-    def sre(self, reg_value=None):
+    async def sre(self, reg_value=None):
         """Read or write the status byte enable register."""
-        return self._read_write('*SRE?', '*SRE', self._validator_8, reg_value)
+        return await self._read_write('*SRE?', '*SRE', self._validator_8, reg_value)
 
-    def stb(self):
+    async def stb(self):
         """Reads the status byte event register."""
-        return self.query('*STB?')
+        return await self.query('*STB?')
 
-    def tst(self):
+    async def tst(self):
         """Perform self-tests."""
-        return self.query('*TST')
+        return await self.query('*TST')
 
-    def wait(self):
+    async def wait(self):
         """Wait until all previous commands are executed."""
-        self.write('*WAI')
+        await self.write('*WAI')
 
-    def trg(self):
+    async def trg(self):
         """Send a trigger command."""
-        self.write('*TRG')
+        await self.write('*TRG')
