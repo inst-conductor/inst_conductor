@@ -152,9 +152,8 @@ class InstrumentSiglentSDL1000(Device4882):
             'SDL1030X-E'
         )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, existing_names=None, **kwargs):
         super().__init__(*args, **kwargs)
-        existing_names = kwargs['existing_names']
         super().init_names('SDL1000', 'SDL', existing_names)
 
     def connect(self, *args, **kwargs):
