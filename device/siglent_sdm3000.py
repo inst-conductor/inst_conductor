@@ -62,6 +62,7 @@
 
 import asyncio
 import json
+import random
 import re
 
 from PyQt6.QtWidgets import (QWidget,
@@ -76,7 +77,7 @@ from PyQt6.QtWidgets import (QWidget,
                              QMessageBox,
                              QRadioButton,
                              QVBoxLayout)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence
 
 from qasync import asyncSlot
@@ -114,15 +115,21 @@ class InstrumentSiglentSDM3000(Device4882):
 
     async def connect(self, *args, **kwargs):
         """Connect to the instrument and set it to remote state."""
-        super().connect(*args, **kwargs)
-        idn = await self.idn()
-        idn = idn.split(',')
-        if len(idn) != 4:
-            assert ValueError
-        (self._manufacturer,
-         self._model,
-         self._serial_number,
-         self._firmware_version) = idn
+        await super().connect(*args, **kwargs)
+        if self._is_fake:
+            self._manufacturer = 'Siglent Technologies'
+            self._model = 'SDM3055'
+            self._serial_number = 'FAKE S/N'
+            self._firmware_version = 'FAKE F/W'
+        else:
+            idn = await self.idn()
+            idn = idn.split(',')
+            if len(idn) != 4:
+                assert ValueError
+            (self._manufacturer,
+             self._model,
+             self._serial_number,
+             self._firmware_version) = idn
         if self._manufacturer != 'Siglent Technologies':
             assert ValueError
         if not self._model.startswith('SDM'):
@@ -221,7 +228,7 @@ _SDM_MODE_PARAMS = {  # noqa: E121,E501
          'params': (
             # For General only! The third param is True meaning to write it while
             # copying _param_state to the instrument.
-            (':TRIGGER:SOURCE',               's', True),
+            (':TRIGGER:SOURCE',          's', True),
          )
         },
     ('ParamSet'):
@@ -230,7 +237,7 @@ _SDM_MODE_PARAMS = {  # noqa: E121,E501
          'params': (
             # For General only! The third param is True meaning to write it while
             # copying _param_state to the instrument.
-            (':FUNCTION',                     'r', False),
+            (':FUNCTION',                'r', False),
          )
         },
     ('DC Voltage'):
@@ -390,29 +397,63 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                     if param0 in self._param_state[idx]:
                         # Modes often ask for the same data, no need to retrieve it twice
                         continue
-                    val = await self._inst.query(f'{param0}?', timeout=10000)
+                    if self._inst._is_fake:
+                        if param0 == ':TRIGGER:SOURCE':
+                            val = 'MANUAL' # XXX
+                        elif param0 == ':FUNCTION':
+                            val = random.choice((
+                                'VOLT:DC', 'VOLT:AC', 'CURR:DC', 'CURR:AC',
+                                'RES', 'FRES',
+                                # 'CAP', 'CONT',
+                                # 'DIOD', 'FREQ', 'PER', 'TEMP' XXX
+                            ))
+                        elif param0.endswith(':IMP'):
+                            val = random.choice(('10M', '10G'))
+                    else:
+                        val = await self._inst.query(f'{param0}?', timeout=10000)
                     param_type = param_spec[1]
                     if param_type[0] == '.': # Handle .3f
                         param_type = param_type[-1]
                     match param_type:
                         case 'f': # Float
-                            val = float(val)
+                            if self._inst._is_fake:
+                                val = random.random()
+                            else:
+                                val = float(val)
                         case 'b' | 'd': # Boolean or Decimal
-                            val = int(float(val))
+                            if self._inst._is_fake:
+                                val = random.randint(0, 1)
+                            else:
+                                val = int(float(val))
                         case 's' | 'r': # String or radio button
                             # The SDM3000 wraps function strings in double qoutes for
                             # some reason
                             val = val.strip('"').upper()
                         case 'rv': # Voltage range
+                            if self._inst._is_fake:
+                                val = random.choice(
+                                    list(self._RANGE_V_SCPI_READ_TO_WRITE.keys()))
                             val = self._range_v_scpi_read_to_scpi_write(val)
                         case 'ri': # Current range
+                            if self._inst._is_fake:
+                                val = random.choice(
+                                    list(self._RANGE_I_SCPI_READ_TO_WRITE.keys()))
                             val = self._range_i_scpi_read_to_scpi_write(val)
                         case 'rr': # Resistance range
+                            if self._inst._is_fake:
+                                val = random.choice(
+                                    list(self._RANGE_R_SCPI_READ_TO_WRITE.keys()))
                             val = self._range_r_scpi_read_to_scpi_write(val)
                         case 'rc': # Capacitance range
+                            if self._inst._is_fake:
+                                val = random.choice(
+                                    list(self._RANGE_C_SCPI_READ_TO_WRITE.keys()))
                             val = self._range_c_scpi_read_to_scpi_write(val)
                         case 'rs': # Speed
-                            val = self._speed_scpi_read_to_scpi_write(val)
+                            if self._inst._is_fake:
+                                val = random.choice((0.3, 1., 10.))
+                            else:
+                                val = self._speed_scpi_read_to_scpi_write(val)
                         case _:
                             assert False, f'Unknown param_type {param_type}'
                     self._param_state[idx][param0] = val
@@ -430,33 +471,16 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
             self._update_all_widgets()
 
     # This writes _param_state -> instrument (opposite of refresh)
-    async def update_instrument(self):
-        """Update the instrument with the current _param_state for paramset 1."""
-        assert False# XXX
-        async with self._config_lock:
-            set_params = set()
-            first_list_mode_write = True
-            for mode, info in _SDM_MODE_PARAMS.items():
-                first_write = True
-                for param_spec in info['params']:
-                    if param_spec[2] is False:
-                        continue # The General False flag, all others are written
-                    param0, param1 = self._scpi_cmds_from_param_info(info, param_spec)
-                    if param0 in set_params:
-                        # Sub-modes often ask for the same data, no need to retrieve it twice
-                        continue
-                    set_params.add(param0)
-                    if first_write and info['mode_name']:
-                        first_write = False
-                        # We have to put the instrument in the correct mode before setting
-                        # the parameters. Not necessary for "General" (mode_name None).
-                        self._put_inst_in_mode(mode[0], mode[1])
-                    self._update_one_param_on_inst(param0, self._param_state[param0])
-                    if param1 is not None:
-                        self._update_one_param_on_inst(param1, self._param_state[param1])
+    async def _update_instrument(self, paramset_num=0, prev_state=None):
+        """Update the instrument with the current _param_state.
 
-            self._update_state_from_param_state(1)
-            self._put_inst_in_mode(self._cur_overall_mode)
+        Does not lock.
+        """
+        ltd_param_state = self._limited_param_state(paramset_num)
+        for key, val in ltd_param_state.items():
+            if prev_state.get(key, None) != val:
+                await self._update_one_param_on_inst(key, val)
+        return ltd_param_state
 
     def _initialize_measurements_and_triggers(self):
         """Initialize the measurements and triggers cache with names and formats."""
@@ -519,7 +543,8 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
         """Start the measurement loop."""
         await self._update_measurements_and_triggers()
 
-    async def update_measurements_and_triggers(self, read_inst=True):
+    @asyncSlot()
+    async def _update_measurements_and_triggers(self, read_inst=True):
         """Read current values, update control panel display, return the values."""
         if self._debug:
             print('** MEASUREMENTS / PARAMSET')
@@ -535,12 +560,14 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                 if (paramset_num != 1 and
                     not self._widget_registry[paramset_num]['Enable'].isChecked()):
                     continue
-                ltd_param_state = self._limited_param_state(paramset_num)
-                for key, val in ltd_param_state.items():
-                    if self._last_measurement_param_state.get(key, None) != val:
-                        self._update_one_param_on_inst(key, val)
-                self._last_measurement_param_state = ltd_param_state
-                val = float(await self._inst.query('READ?', timeout=10000))
+                # Update the instrument for the current paramset
+                self._last_measurement_param_state = (
+                    await self._update_instrument(paramset_num,
+                                                  self._last_measurement_param_state))
+                if self._inst._is_fake:
+                    val = random.random()
+                else:
+                    val = float(await self._inst.query('READ?', timeout=10))
                 if abs(val) == 9.9e37:
                     val = None
                 mode = self._scpi_to_mode(self._param_state[paramset_num][':FUNCTION'])
@@ -552,8 +579,12 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                     text += ' ' + measurements[mode]['unit']
                 self._widget_registry[paramset_num]['Measurement'].setText(text)
 
-        self._cached_measurements = measurements
-        self._cached_triggers = triggers
+        # Wait until all measurements have been made and then update the display
+        # widgets all at once so it looks like they were done simultaneously.
+        # Once we've gone through the whole measurement series, schedule it to
+        # run again soon.
+        QTimer.singleShot(self._measurement_interval,
+                          self._update_measurements_and_triggers)
 
     def get_measurements(self):
         """Return most recently cached measurements."""
@@ -950,7 +981,7 @@ Connected to {self._inst.resource_name}
             # Retrieve the List mode parameters
             self._param_state = ps
             # Clean up the param state. We don't want to start with the load or short on.
-            self.update_instrument()
+            await self._update_instrument()
 
     @asyncSlot()
     async def _menu_do_reset_device(self):
@@ -1030,6 +1061,7 @@ Connected to {self._inst.resource_name}
             paramset_num, mode = rb.wid
             self._param_state[paramset_num][':FUNCTION'] = self._mode_to_scpi(mode)
             if self._debug:
+                print('Set overall mode')
                 print(self._param_state[paramset_num])
             self._update_widgets(paramset_num)
 
@@ -1081,6 +1113,7 @@ Connected to {self._inst.resource_name}
             return
         if not rb.isChecked():
             return
+        # XXX THIS KEEPS FREEZING EVERYTHING - WHY?
         async with self._config_lock:
             paramset_num, val = rb.wid
             info = self._cur_mode_param_info(paramset_num)
@@ -1133,6 +1166,7 @@ Connected to {self._inst.resource_name}
         """Handle clicking on any input value edit box."""
         if self._disable_callbacks: # Prevent recursive calls
             return
+        assert False # XXX
         async with self._config_lock:
             param_name, scpi = input.wid
             scpi_cmd_state = None
@@ -1174,8 +1208,9 @@ Connected to {self._inst.resource_name}
             return
         async with self._config_lock:
             new_param_state = {':TRIGGER:SOURCE': rb.mode.upper()}
-            self._update_param_state_and_inst(new_param_state)
-            self._update_trigger_buttons()
+            self._update_global_param_state_and_inst(new_param_state)
+            self._update_trigger_buttons() # XXX
+
 
     ################################
     ### Internal helper routines ###
@@ -1548,6 +1583,7 @@ Connected to {self._inst.resource_name}
                 self._widget_registry[paramset_num][widget_label].show()
                 self._widget_registry[paramset_num][widget_label].setEnabled(True)
 
+            # XXX Review this entire section
             if widget_main is not None:
                 full_scpi_cmd = scpi_cmd
                 if mode_name is not None and scpi_cmd[0] != ':':
@@ -1609,7 +1645,7 @@ Connected to {self._inst.resource_name}
                     case _:
                         assert False, f'Unknown param type {param_type}'
 
-        self._update_param_state_and_inst(paramset_num, new_param_state)
+        # XXX self._update_param_state_and_inst(paramset_num, new_param_state)
 
         status_msg = None
         if status_msg is None:
@@ -1624,12 +1660,15 @@ Connected to {self._inst.resource_name}
         cur_mode = self._scpi_to_mode(self._param_state[paramset_num][':FUNCTION'])
         return _SDM_MODE_PARAMS[cur_mode]
 
-    def _update_param_state_and_inst(self, paramset_num, new_param_state):
-        """Update the internal state and instrument based on partial param_state."""
+    async def _update_global_param_state_and_inst(self, new_param_state):
+        """Update the internal global state and instrument from partial param_state.
+
+        Does not lock.
+        """
         for key, data in new_param_state.items():
-            if data != self._param_state[key]:
-                # self._update_one_param_on_inst(key, data)  XXX
-                self._param_state[paramset_num][key] = data
+            if data != self._param_state[0][key]:
+                await self._update_one_param_on_inst(key, data)
+                self._param_state[0][key] = data
 
     async def _update_one_param_on_inst(self, key, data):
         """Update the value for a single parameter on the instrument.

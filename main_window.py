@@ -602,13 +602,13 @@ Copyright 2022, Robert S. French"""
         try:
             inst = await device.create_device(resource_name,
                                               existing_names=self.device_names)
-        # except pyvisa.errors.VisaIOError as ex: XXX
-        #     QMessageBox.critical(self, 'Error',
-        #                          f'Failed to open "{resource_name}":\n{ex.description}')
-        #     return
+        except device.NotConnectedError:
+            QMessageBox.critical(self, 'Error',
+                                 f'Failed to open "{resource_name}"')
+            return
         except device.UnknownInstrumentType as ex:
             QMessageBox.critical(self, 'Error',
-                                       f'Unknown instrument type "{ex.args[0]}"')
+                                 f'Unknown instrument type "{ex.args[0]}"')
             return
 
         config_widget = None

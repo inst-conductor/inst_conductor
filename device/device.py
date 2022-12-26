@@ -30,10 +30,6 @@ class NotConnectedError(Exception):
     pass
 
 
-class ContactLostError(Exception):
-    pass
-
-
 class Device(object):
     """Class representing any generic device accessible through VISA."""
     def __init__(self, resource_name):
@@ -49,6 +45,8 @@ class Device(object):
         self._hardware_version = None
         self._debug = False
         self._io_lock = asyncio.Lock()
+        self._connection_timeout = 3
+        self._is_fake = False
 
     @property
     def connected(self):
@@ -110,9 +108,23 @@ class Device(object):
         if reader is not None or writer is not None:
             self._reader, self._writer = reader, writer
             self._connected = True
+        elif self._resource_name.startswith('FAKE::'):
+            self._reader = self._writer = None
+            self._connected = True
+            self._is_fake = True
+            if self._debug:
+                print(f'Connected to fake device {self._resource_name}')
+            return
         elif self._resource_name.startswith('TCPIP::'):
             ip_addr = self._resource_name.replace('TCPIP::', '')
-            self._reader, self._writer = await asyncio.open_connection(ip_addr, 5025)
+            try:
+                self._reader, self._writer = await asyncio.wait_for(
+                    asyncio.open_connection(ip_addr, 5025),
+                    timeout=self._connection_timeout)
+            except: # Too many possible exceptions to check for
+                if self._debug:
+                    print(f'Timeout connecting to {self._resource_name}')
+                raise NotConnectedError
             self._connected = True
             if self._debug:
                 print(f'Connected to {self._resource_name}')
@@ -144,8 +156,9 @@ class Device(object):
         """Close the connection to the device."""
         if not self._connected:
             raise NotConnectedError
-        self._writer.close()
-        await self._writer.wait_closed()
+        if not self._is_fake:
+            self._writer.close()
+            await self._writer.wait_closed()
         self._connected = False
         if self._debug:
             print(f'Disconnected from {self._resource_name}')
@@ -154,17 +167,20 @@ class Device(object):
         """VISA query, write then read."""
         if not self._connected:
             raise NotConnectedError
-        # try:
-        async with self._io_lock:
-            # Write and Read have to be adjacent to each other
-            await self.write_no_lock(s)
-            ret = await self.read_no_lock()
-        ret = ret.strip(' \t\r\n')
-        # except pyvisa.errors.VisaIOError:
-        #     self.disconnect()
-        #     if self._debug:
-        #         print(f'query "{s}" resulted in disconnect')
-        #     raise ContactLostError
+        if self._is_fake:
+            ret = 'QUERY_RESULT'
+        else:
+            # try:
+            async with self._io_lock:
+                # Write and Read have to be adjacent to each other
+                await self.write_no_lock(s)
+                ret = await self.read_no_lock()
+            ret = ret.strip(' \t\r\n')
+            # except pyvisa.errors.VisaIOError:
+            #     self.disconnect()
+            #     if self._debug:
+            #         print(f'query "{s}" resulted in disconnect')
+            #     raise ContactLostError
         if self._debug:
             print(f'query "{s}" returned "{ret}"')
         return ret
@@ -173,12 +189,15 @@ class Device(object):
         """VISA read, strips termination characters. No locking."""
         if not self._connected:
             raise NotConnectedError
-        # try:
-        ret = await self._reader.readline()
-        ret = ret.decode().strip(' \t\r\n')
-        # except pyvisa.errors.VisaIOError:
-        #     self.disconnect()
-        #     raise ContactLostError
+        if self._is_fake:
+            ret = 'READ_RESULT'
+        else:
+            # try:
+            ret = await self._reader.readline()
+            ret = ret.decode().strip(' \t\r\n')
+            # except pyvisa.errors.VisaIOError:
+            #     self.disconnect()
+            #     raise ContactLostError
         return ret
 
     async def read(self):
@@ -193,13 +212,16 @@ class Device(object):
         """VISA read_raw."""
         if not self._connected:
             raise NotConnectedError
-        # try:
-        async with self._io_lock:
-            ret = await self._reader.readline()
-        ret = ret.decode()
-        # except pyvisa.errors.VisaIOError:
-        #     self.disconnect()
-        #     raise ContactLostError
+        if self._is_fake:
+            ret = 'READ_RAW_RESULT'
+        else:
+            # try:
+            async with self._io_lock:
+                ret = await self._reader.readline()
+            ret = ret.decode()
+            # except pyvisa.errors.VisaIOError:
+            #     self.disconnect()
+            #     raise ContactLostError
         if self._debug:
             print(f'read_raw returned "{ret}"')
         return ret
@@ -208,6 +230,8 @@ class Device(object):
         """VISA write, appending termination characters. No locking."""
         if not self._connected:
             raise NotConnectedError
+        if self._is_fake:
+            return
         # try:
         self._writer.write((s+'\n').encode())
         await self._writer.drain()
@@ -222,6 +246,8 @@ class Device(object):
             raise NotConnectedError
         if self._debug:
             print(f'write "{s}"')
+        if self._is_fake:
+            return
         # try:
         async with self._io_lock:
             self._writer.write((s+'\n').encode())
@@ -237,6 +263,8 @@ class Device(object):
             raise NotConnectedError
         if self._debug:
             print(f'write_raw "{s}"')
+        if self._is_fake:
+            return
         # try:
         self._writer.write(s.encode())
         await self._writer.drain()

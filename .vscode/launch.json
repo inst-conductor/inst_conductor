@@ -5,6 +5,17 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Fake SDM",
+            "type": "python",
+            "request": "launch",
+            "program": "inst_conductor.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "FAKE::SDM3055"
+            ]
+        },
+        {
             "name": "SDM",
             "type": "python",
             "request": "launch",

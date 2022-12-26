@@ -52,7 +52,7 @@ async def main():
         await main_window._menu_do_open_ip()
     else:
         for resource in sys.argv[1:]:
-            await main_window._open_ip(resource)
+            await main_window._open_resource(resource)
 
     await future
     return True

@@ -21,7 +21,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ################################################################################
 
-from .device import Device4882
+from .device import (NotConnectedError,
+                     Device4882)
 from .siglent_sdl1000 import InstrumentSiglentSDL1000
 from .siglent_sdm3000 import InstrumentSiglentSDM3000
 from .siglent_spd3303 import InstrumentSiglentSPD3303
@@ -47,12 +48,20 @@ async def create_device(resource_name, existing_names=None, **kwargs):
     """"Query a device for its IDN and create the appropriate instrument class."""
     dev = Device4882(resource_name)
     await dev.connect()
-    idn = await dev.idn()
-    idn_split = idn.split(',')
-    cls = None
-    if len(idn_split) >= 2:
-        manufacturer, model, *_ = idn_split
-        cls = _DEVICE_MAPPING.get((manufacturer, model), None)
+    if dev._is_fake:
+        model = resource_name.replace('FAKE::', '')
+        for (manufacturer, inst_name), cls in _DEVICE_MAPPING.items():
+            if inst_name == model:
+                break
+        else:
+            raise UnknownInstrumentType(model)
+    else:
+        idn = await dev.idn()
+        idn_split = idn.split(',')
+        cls = None
+        if len(idn_split) >= 2:
+            manufacturer, model, *_ = idn_split
+            cls = _DEVICE_MAPPING.get((manufacturer, model), None)
     if cls is None:
         raise UnknownInstrumentType(idn)
     new_dev = cls(resource_name, existing_names=existing_names, **kwargs)
