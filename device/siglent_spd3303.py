@@ -41,13 +41,11 @@ import asyncio
 import json
 import time
 
-from PyQt6.QtWidgets import (QFileDialog,
-                             QGridLayout,
+from PyQt6.QtWidgets import (QGridLayout,
                              QGroupBox,
                              QHBoxLayout,
                              QLabel,
                              QLayout,
-                             QMessageBox,
                              QPushButton,
                              QTableView,
                              QVBoxLayout,
@@ -56,7 +54,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence, QShortcut
 
 from qasync import asyncSlot
-from .qasync_helper import asyncSlotSender
+from .qasync_helper import asyncSlotSender, QAsyncFileDialog, QAsyncMessageBox
 
 import pyqtgraph as pg
 
@@ -240,14 +238,17 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
     async def refresh(self):
         """Read all parameters from the instrument and set our internal state to match."""
         async with self._config_lock:
-            status = int(self._inst.query('SYST:STATUS?').replace('0x', ''), base=16)
+            status = await self._inst.query('SYST:STATUS?')
+            status = int(status.replace('0x', ''), base=16)
             for ch in range(2):
-                self._psu_voltage[ch] = float(self._inst.query(f'CH{ch+1}:VOLT?'))
-                self._psu_current[ch] = float(self._inst.query(f'CH{ch+1}:CURRENT?'))
+                self._psu_voltage[ch] = float(await self._inst.query(f'CH{ch+1}:VOLT?'))
+                self._psu_current[ch] = float(
+                    await self._inst.query(f'CH{ch+1}:CURRENT?'))
                 self._psu_on_off[ch] = bool(status & (1 << (ch+4)))
                 for entry in range(5):
                     # TIMER:SET? returns an extra comma at the end for some reason
-                    res = self._inst.query(f'TIMER:SET? CH{ch+1},{entry+1}').split(',')
+                    res = await self._inst.query(f'TIMER:SET? CH{ch+1},{entry+1}')
+                    res = res.split(',')
                     volt = float(res[0])
                     curr = float(res[1])
                     timer = float(res[2])
@@ -342,10 +343,12 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
 #   8 - CH1 analog, waveform
 #   9 - CH2 analog, waveform
 
-    async def update_measurements_and_triggers(self):
+    @asyncSlot()
+    async def _update_measurements_and_triggers(self):
         """Read current values, update control panel display, return the values."""
         async with self._config_lock:
-            status = int(await self._inst.query('SYST:STATUS?').replace('0x', ''), base=16)
+            status = int((await self._inst.query('SYST:STATUS?')).replace('0x', ''),
+                         base=16)
             self._psu_cc[0] = bool(status & 0x01)
             self._psu_cc[1] = bool(status & 0x02)
             self._psu_on_off[0] = bool(status & 0x10)
@@ -374,7 +377,7 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                 w.setText('---  V')
             else:
                 async with self._config_lock:
-                    voltage = self._inst.measure_voltage(ch+1)
+                    voltage = await self._inst.measure_voltage(ch+1)
                     w.setText(f'{voltage:6.3f} V')
             measurements[f'Voltage{ch+1}']['val'] = voltage
 
@@ -384,7 +387,7 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                 w.setText('---  A')
             else:
                 async with self._config_lock:
-                    current = self._inst.measure_current(ch+1)
+                    current = await self._inst.measure_current(ch+1)
                     w.setText(f'{current:5.3f} A')
             measurements[f'Current{ch+1}']['val'] = current
 
@@ -394,7 +397,7 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                 w.setText('---  W')
             else:
                 async with self._config_lock:
-                    power = self._inst.measure_power(ch+1)
+                    power = await self._inst.measure_power(ch+1)
                     w.setText(f'{power:6.3f} W')
             measurements[f'Power{ch+1}']['val'] = power
 
@@ -784,7 +787,7 @@ Connected to {self._inst.resource_name}
     HW {self._inst.hardware_version}
     FW {self._inst.firmware_version}"""
 
-        QMessageBox.about(self, 'About', msg)
+        QAsyncMessageBox.about(self, 'About', msg)
 
     def _menu_do_keyboard_shortcuts(self):
         """Show the Keyboard Shortcuts."""
@@ -793,17 +796,21 @@ Alt+B       Channel 2 ON/OFF
 Alt+F       All channels OFF
 Alt+N       All channels ON
 """
-        QMessageBox.about(self, 'Keyboard Shortcuts', msg)
+        QAsyncMessageBox.about(self, 'Keyboard Shortcuts', msg)
 
     @asyncSlot()
     async def _menu_do_save_configuration(self):
         """Save the current configuration to a file."""
-        fn = QFileDialog.getSaveFileName(self, caption='Save Configuration',
-                                         filter='All (*.*);;SPD Configuration (*.spdcfg)',
-                                         initialFilter='SPD Configuration (*.spdcfg)')
-        fn = fn[0]
-        if not fn:
+        fn = await QAsyncFileDialog.getSaveFileName(
+            self, caption='Save Configuration',
+            filter='SPD Configuration (*.spdcfg)',
+            selectedFilter='SPD Configuration (*.spdcfg)',
+            defaultSuffix='.spdcfg')
+        if not fn or not fn[0]:
             return
+        fn = fn[0]
+        if not fn.endswith('.spdcfg'):
+            fn += '.spdcfg'
         async with self._config_lock:
             cfg = {}
             for ch in range(2):
@@ -840,12 +847,13 @@ Alt+N       All channels ON
     @asyncSlot()
     async def _menu_do_load_configuration(self):
         """Load the current configuration from a file."""
-        fn = QFileDialog.getOpenFileName(self, caption='Load Configuration',
-                                         filter='All (*.*);;SPD Configuration (*.spdcfg)',
-                                         initialFilter='SPD Configuration (*.spdcfg)')
-        fn = fn[0]
-        if not fn:
+        fn = await QAsyncFileDialog.getOpenFileName(
+            self, caption='Load Configuration',
+            filter='SPD Configuration (*.spdcfg);;All (*.*)',
+            selectedFilter='SPD Configuration (*.spdcfg)')
+        if not fn or not fn[0]:
             return
+        fn = fn[0]
         with open(fn, 'r') as fp:
             cfg = json.load(fp)
         async with self._config_lock:
@@ -901,7 +909,7 @@ Alt+N       All channels ON
             await self._update_widgets()
 
     @asyncSlot()
-    async def _menu_do_device_independent(self, state):
+    async def _menu_do_device_independent(self):
         """Handle Device Independent menu."""
         async with self._config_lock:
             self._widget_registry['IndependentAction'].setChecked(True)
@@ -916,7 +924,7 @@ Alt+N       All channels ON
             await self._update_widgets()
 
     @asyncSlot()
-    async def _menu_do_device_series(self, state):
+    async def _menu_do_device_series(self):
         """Handle Device Series menu."""
         async with self._config_lock:
             self._widget_registry['IndependentAction'].setChecked(False)
@@ -931,7 +939,7 @@ Alt+N       All channels ON
             await self._update_widgets()
 
     @asyncSlot()
-    async def _menu_do_device_parallel(self, state):
+    async def _menu_do_device_parallel(self):
         """Handle Device Parallel menu."""
         async with self._config_lock:
             self._widget_registry['IndependentAction'].setChecked(False)

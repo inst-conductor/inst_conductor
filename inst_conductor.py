@@ -52,6 +52,8 @@ async def main():
         await main_window._menu_do_open_ip()
     else:
         for resource in sys.argv[1:]:
+            if resource.find('::') == -1:
+                resource = 'TCPIP::' + resource
             await main_window._open_resource(resource)
 
     await future

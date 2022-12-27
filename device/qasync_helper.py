@@ -22,11 +22,13 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ################################################################################
 
+
 import asyncio
 import functools
 import sys
 
 from PyQt6.QtCore import pyqtSlot as Slot
+from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
 
 def asyncSlotSender(*args, **kwargs):
@@ -59,3 +61,76 @@ def asyncSlotSender(*args, **kwargs):
         return wrapper
 
     return outer_decorator
+
+
+# Asyncio-aware versions of standard dialog boxes
+# Modified from github.com/duniter/sakia/src/sakia/gui/widgets/dialogs.py (GPL)
+
+def dialog_async_exec(dialog):
+    future = asyncio.Future()
+    dialog.finished.connect(lambda r: future.set_result(r))
+    dialog.open()
+    return future
+
+
+class QAsyncFileDialog:
+    @staticmethod
+    async def getSaveFileName(parent, selectedFilter=None, defaultSuffix=None, **kwargs):
+        dialog = QFileDialog(parent, **kwargs)
+        if selectedFilter is not None:
+            dialog.selectNameFilter(selectedFilter)
+        if defaultSuffix is not None:
+            dialog.setDefaultSuffix(defaultSuffix)
+        # Fix linux crash if not native QFileDialog is async...
+        if sys.platform != 'linux':
+            dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
+        result = await dialog_async_exec(dialog)
+        if result == 1: # QFileDialog.AcceptMode.AcceptSave:
+            return dialog.selectedFiles()
+        else:
+            return []
+
+    @staticmethod
+    async def getOpenFileName(parent, selectedFilter=None, **kwargs):
+        dialog = QFileDialog(parent, **kwargs)
+        if selectedFilter is not None:
+            dialog.selectNameFilter(selectedFilter)
+        # Fix linux crash if not native QFileDialog is async...
+        dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+        if sys.platform != 'linux':
+            dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptOpen)
+        result = await dialog_async_exec(dialog)
+        if result == 1: # QFileDialog.AcceptMode.AcceptOpen:
+            return dialog.selectedFiles()
+        else:
+            return []
+
+
+class QAsyncMessageBox:
+    @staticmethod
+    def critical(parent, title, label, buttons=QMessageBox.StandardButton.Ok):
+        dialog = QMessageBox(QMessageBox.Icon.Critical, title, label, buttons, parent)
+        return dialog_async_exec(dialog)
+
+    @staticmethod
+    def information(parent, title, label, buttons=QMessageBox.StandardButton.Ok):
+        dialog = QMessageBox(QMessageBox.Icon.Information, title, label, buttons, parent)
+        return dialog_async_exec(dialog)
+
+    @staticmethod
+    def warning(parent, title, label, buttons=QMessageBox.StandardButton.Ok):
+        dialog = QMessageBox(QMessageBox.Icon.Warning, title, label, buttons, parent)
+        return dialog_async_exec(dialog)
+
+    @staticmethod
+    def question(parent, title, label, buttons=QMessageBox.StandardButton.Yes|
+                                               QMessageBox.StandardButton.No):
+        dialog = QMessageBox(QMessageBox.Icon.Question, title, label, buttons, parent)
+        return dialog_async_exec(dialog)
+
+    @staticmethod
+    def about(parent, title, text, buttons=QMessageBox.StandardButton.Ok):
+        dialog = QMessageBox(QMessageBox.Icon.NoIcon, title, text, buttons, parent)
+        return dialog_async_exec(dialog)

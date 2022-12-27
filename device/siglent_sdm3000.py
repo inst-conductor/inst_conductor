@@ -68,20 +68,18 @@ import re
 from PyQt6.QtWidgets import (QWidget,
                              QButtonGroup,
                              QCheckBox,
-                             QFileDialog,
                              QGridLayout,
                              QGroupBox,
                              QHBoxLayout,
                              QLabel,
                              QLayout,
-                             QMessageBox,
                              QRadioButton,
                              QVBoxLayout)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence
 
 from qasync import asyncSlot
-from .qasync_helper import asyncSlotSender
+from .qasync_helper import asyncSlotSender, QAsyncFileDialog, QAsyncMessageBox
 
 from .config_widget_base import (ConfigureWidgetBase,
                                  MultiSpeedSpinBox)
@@ -944,23 +942,25 @@ Connected to {self._inst.resource_name}
     S/N {self._inst.serial_number}
     FW {self._inst.firmware_version}"""
 
-        QMessageBox.about(self, 'About', msg)
+        QAsyncMessageBox.about(self, 'About', msg)
 
     def _menu_do_keyboard_shortcuts(self):
         """Show the Keyboard Shortcuts."""
         msg = """XXX TBD
 """
-        QMessageBox.about(self, 'Keyboard Shortcuts', msg)
+        QAsyncMessageBox.about(self, 'Keyboard Shortcuts', msg)
 
     @asyncSlot()
     async def _menu_do_save_configuration(self):
         """Save the current configuration to a file."""
-        fn = QFileDialog.getSaveFileName(self, caption='Save Configuration',
-                                         filter='All (*.*);;SDM Configuration (*.sdmcfg)',
-                                         initialFilter='SDM Configuration (*.sdmcfg)')
-        fn = fn[0]
-        if not fn:
+        fn = await QAsyncFileDialog.getSaveFileName(
+            self, caption='Save Configuration',
+            filter='SDM Configuration (*.sdmcfg)',
+            selectedFilter='SDM Configuration (*.sdmcfg)',
+            defaultSuffix='.sdmcfg')
+        if not fn or not fn[0]:
             return
+        fn = fn[0]
         async with self._config_lock:
             ps = self._param_state.copy()
             with open(fn, 'w') as fp:
@@ -969,12 +969,13 @@ Connected to {self._inst.resource_name}
     @asyncSlot()
     async def _menu_do_load_configuration(self):
         """Load the current configuration from a file."""
-        fn = QFileDialog.getOpenFileName(self, caption='Load Configuration',
-                                         filter='All (*.*);;SDM Configuration (*.sdmcfg)',
-                                         initialFilter='SDM Configuration (*.sdmcfg)')
-        fn = fn[0]
-        if not fn:
+        fn = await QAsyncFileDialog.getOpenFileName(
+            self, caption='Load Configuration',
+            filter='SDM Configuration (*.sdmcfg);;All (*.*)',
+            selectedFilter='SDM Configuration (*.sdmcfg)')
+        if not fn or not fn[0]:
             return
+        fn = fn[0]
         async with self._config_lock:
             with open(fn, 'r') as fp:
                 ps = json.load(fp)

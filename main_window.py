@@ -42,7 +42,6 @@ from PyQt6.QtWidgets import (QButtonGroup,
                              QLayout,
                              QLineEdit,
                              QMenuBar,
-                             QMessageBox,
                              QPushButton,
                              QRadioButton,
                              QVBoxLayout,
@@ -52,7 +51,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence
 
 from qasync import asyncSlot, asyncClose
-from device.qasync_helper import asyncSlotSender
+from device.qasync_helper import asyncSlotSender, QAsyncMessageBox
 
 import csv
 import numpy as np
@@ -565,7 +564,7 @@ Currently open resources:
 {open}
 
 Copyright 2022, Robert S. French"""
-        QMessageBox.about(self, 'About', msg)
+        QAsyncMessageBox.about(self, 'About', msg)
 
     @asyncSlot()
     async def _menu_do_open_ip(self):
@@ -594,8 +593,8 @@ Copyright 2022, Robert S. French"""
     async def _open_resource(self, resource_name):
         """Open a resource by name."""
         if resource_name in [x.name for x in self._open_resources]:
-            QMessageBox.critical(self, 'Error',
-                                       f'Resource "{resource_name}" is already open!')
+            QAsyncMessageBox.critical(self, 'Error',
+                                      f'Resource "{resource_name}" is already open!')
             return
 
         # Create the device
@@ -603,12 +602,12 @@ Copyright 2022, Robert S. French"""
             inst = await device.create_device(resource_name,
                                               existing_names=self.device_names)
         except device.NotConnectedError:
-            QMessageBox.critical(self, 'Error',
-                                 f'Failed to open "{resource_name}"')
+            QAsyncMessageBox.critical(self, 'Error',
+                                      f'Failed to open "{resource_name}"')
             return
         except device.UnknownInstrumentType as ex:
-            QMessageBox.critical(self, 'Error',
-                                 f'Unknown instrument type "{ex.args[0]}"')
+            QAsyncMessageBox.critical(self, 'Error',
+                                      f'Unknown instrument type "{ex.args[0]}"')
             return
 
         config_widget = None

@@ -31,7 +31,6 @@ from PyQt6.QtWidgets import (QAbstractSpinBox,
                              QInputDialog,
                              QLayout,
                              QMenuBar,
-                             QMessageBox,
                              QPlainTextEdit,
                              QPushButton,
                              QStatusBar,
@@ -43,7 +42,7 @@ from PyQt6.QtGui import QAction, QColor
 from PyQt6.QtPrintSupport import QPrintDialog
 
 from qasync import asyncSlot, asyncClose
-
+from qasync_helper import QAsyncMessageBox
 
 class ConfigureWidgetBase(QWidget):
     """The base class for all instrument configuration widgets.
@@ -138,24 +137,25 @@ class ConfigureWidgetBase(QWidget):
         """Execute Configuration:Refresh from instrument menu option."""
         self.refresh()
 
-    def _menu_do_rename_device(self):
+    @asyncSlot()
+    async def _menu_do_rename_device(self):
         """Execute Device:Rename menu option."""
         new_name, ok = QInputDialog.getText(self, 'Change device name',
                                             'Device name:',
                                             text=self._inst.name)
         if ok and new_name != self._inst.name:
             if new_name in self._main_window.device_names:
-                QMessageBox.critical(self, 'Duplicate Name',
-                                     f'Name "{new_name}" is already used!')
+                QAsyncMessageBox.critical(self, 'Duplicate Name',
+                                          f'Name "{new_name}" is already used!')
                 return
             self._inst.name = new_name
-            self.device_renamed()
+            await self.device_renamed()
 
-    def device_renamed(self):
+    async def device_renamed(self):
         """Called when the device is renamed."""
         self.setWindowTitle(f'{self._inst.long_name} ({self._inst.name})')
         # Notify the main widget so that all of the UI lists and whatnot can be updated.
-        self._main_window.device_renamed(self)
+        await self._main_window.device_renamed(self)
 
     def _menu_do_load_configuration(self):
         """Execute Configuration:Load menu option."""

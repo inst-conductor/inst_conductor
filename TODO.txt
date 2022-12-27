@@ -1,3 +1,17 @@
+Next tasks:
+- Fix QInputDialog.getText
+- Fix IP input dialog
+- SDL implement locking for configuration queries and changes
+- SDL disable all input during refresh()
+- SDL Fix bug where battery report shows up instantly when starting up already in batt mode
+- Put instrument prefixes on read/write/query debug messages
+- Implement async in SDM
+- Implement async in SPD
+- Put timestamps on measurements in dictionary
+- Clean up widget init code to have more standardized names
+- SDL make reset test log more obvious when there is something in the log
+
+
 ** PyInstaller **
 
 pyinstaller inst_conductor.py --hidden-import pyqtgraph.graphicsItems.ViewBox.axisCtrlTemplate_pyqt6 --hidden-import pyqtgraph.graphicsItems.ViewBox.axisCtrlTemplate_pyqt6 --hidden-import pyqtgraph.graphicsItems.PlotItem.plotConfigTemplate_pyqt6 --hidden-import pyqtgraph.imageview.ImageViewTemplate_pyqt6 --hidden-import pyvisa_py --noconfirm --onefile --windowed
