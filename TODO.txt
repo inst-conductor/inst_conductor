@@ -52,6 +52,12 @@ https://github.com/pyqtgraph/pyqtgraph/issues/1381
 - Probability density
 - Add custom past time
 
+J:\Server\rfrench\src\inst_conductor\venv_3.10\lib\site-packages\qasync\_windows.py
+Line 99
+        # with QtCore.QMutexLocker(self._lock):
+        if True:
+See https://github.com/CabbageDevelopment/qasync/issues/62
+
 ** Measurements/Statistics View **
 
 ** Automated Control **

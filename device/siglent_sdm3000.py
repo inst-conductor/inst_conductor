@@ -348,7 +348,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
     _NUM_PARAMSET = 4
 
     def __init__(self, *args, **kwargs):
-        self._debug = True
+        self._debug = False
 
         # Override the widget registry to be paramset-specific.
         self._widget_registry = [{} for i in range(self._NUM_PARAMSET+1)]
@@ -1546,8 +1546,8 @@ Connected to {self._inst.resource_name}
         # which then call this routine again in the middle of it already doing its
         # work.
         self._disable_callbacks = True
-        if self._debug:
-            print('Disable callbacks True')
+        # if self._debug:
+        #     print('Disable callbacks True')
         if paramset_num == 0:
             # Global
             # Now we enable or disable widgets by first scanning through the "General"
@@ -1667,11 +1667,11 @@ Connected to {self._inst.resource_name}
                         for trial_widget in self._widget_registry[paramset_num]:
                             if re.fullmatch(widget_main, trial_widget):
                                 widget = self._widget_registry[paramset_num][trial_widget]
-                                print(f'Enabled #{paramset_num} {trial_widget}')
+                                # print(f'Enabled #{paramset_num} {trial_widget}')
                                 widget.setEnabled(True)
                                 checked = (trial_widget.upper()
                                            .endswith('_'+str(val).upper()))
-                                print(f'Checked {checked}  #{paramset_num} {trial_widget}')
+                                # print(f'Checked {checked}  #{paramset_num} {trial_widget}')
                                 widget.setChecked(checked)
                     case _:
                         assert False, f'Unknown param type {param_type}'
@@ -1685,8 +1685,8 @@ Connected to {self._inst.resource_name}
             self._statusbar.showMessage(status_msg)
 
         self._disable_callbacks = False
-        if self._debug:
-            print('Disable callbacks False')
+        # if self._debug:
+        #     print('Disable callbacks False')
 
     def _cur_mode_param_info(self, paramset_num):
         """Get the parameter info structure for the current mode."""

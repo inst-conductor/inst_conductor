@@ -34,7 +34,6 @@ from PyQt6.QtWidgets import (QButtonGroup,
                              QDialog,
                              QDialogButtonBox,
                              QDoubleSpinBox,
-                             QFileDialog,
                              QGridLayout,
                              QGroupBox,
                              QHBoxLayout,
@@ -51,7 +50,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence
 
 from qasync import asyncSlot, asyncClose
-from device.qasync_helper import asyncSlotSender, QAsyncMessageBox
+from device.qasync_helper import asyncSlotSender, QAsyncFileDialog, QAsyncMessageBox
 
 import csv
 import numpy as np
@@ -412,10 +411,11 @@ class MainWindow(QWidget):
     @asyncSlot()
     async def _on_click_save_csv(self):
         """Handle Save CSV button."""
-        fn = QFileDialog.getSaveFileName(self,
-                                            caption='Save Measurements as CSV',
-                                            filter='All (*.*);;CSV (*.csv)',
-                                            initialFilter='CSV (*.csv)')
+        fn = QAsyncFileDialog.getSaveFileName(
+            self, caption='Save Measurements as CSV',
+            filter='CSV (*.csv);;All (*.*)',
+            selectedFilter='CSV (*.csv)',
+            defaultSuffix='.csv')
         fn = fn[0]
         if not fn:
             return
@@ -611,7 +611,7 @@ Copyright 2022, Robert S. French"""
             return
 
         config_widget = None
-        inst.set_debug(True)
+        # inst.set_debug(True)
         await inst.connect()
         config_widget = inst.configure_widget(self)
         config_widget.show()

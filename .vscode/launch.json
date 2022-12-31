@@ -59,6 +59,19 @@
                 "192.168.0.63",
                 "192.168.0.64"
             ]
+        },
+        {
+            "name": "SDL&SPD&SDM",
+            "type": "python",
+            "request": "launch",
+            "program": "inst_conductor.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "192.168.0.62",
+                "192.168.0.63",
+                "192.168.0.64"
+            ]
         }
 
     ]

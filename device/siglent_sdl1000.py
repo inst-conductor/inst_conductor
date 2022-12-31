@@ -2377,6 +2377,16 @@ Alt+T       Trigger
             enabled = True
         self._widget_registry['Trigger'].setEnabled(enabled)
 
+    def _update_batt_clear_button(self):
+        """Update the button that clears the battery testing history.
+
+        Does not lock.
+        """
+        if self._cur_overall_mode != 'Battery':
+            return
+        enabled = not self._param_state[':INPUT:STATE']
+        self._widget_registry['ClearAddCap'].setEnabled(enabled)
+
     @asyncSlot()
     async def _on_click_trigger(self):
         """Handle clicking on the main trigger button."""
@@ -2903,6 +2913,7 @@ Alt+T       Trigger
         self._update_load_onoff_button()
         self._update_short_onoff_button()
         self._update_trigger_buttons()
+        self._update_batt_clear_button()
 
         # Maybe update the List table
         if self._cur_overall_mode == 'List':
@@ -2964,6 +2975,11 @@ List status tracking is an approximation."""
             len(self._batt_log_start_times) > 0):
             status_msg = """Warning: Data held from previous discharge.
 Reset Addl Cap & Test Log to start fresh."""
+        elif self._cur_overall_mode == 'Dynamic' and self._param_state[':INPUT:STATE']:
+            if self._cur_dynamic_mode == 'Pulse':
+                status_msg = 'Normally A level; Use Trigger to activate pulse to B level'
+            elif self._cur_dynamic_mode == 'Toggle':
+                status_msg = 'Use Trigger to switch between A and B Levels'
         if status_msg is None:
             self._statusbar.clearMessage()
         else:
