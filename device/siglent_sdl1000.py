@@ -1224,7 +1224,7 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
             bg.addButton(rb)
             rb.button_group = bg
             rb.wid = mode
-            rb.toggled.connect(self._on_click_overall_mode)
+            rb.clicked.connect(self._on_click_overall_mode)
             self._widget_registry['Overall_'+mode] = rb
         layoutv.addStretch()
         # Right column
@@ -1237,7 +1237,7 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
             bg.addButton(rb)
             rb.button_group = bg
             rb.wid = mode
-            rb.toggled.connect(self._on_click_overall_mode)
+            rb.clicked.connect(self._on_click_overall_mode)
             self._widget_registry['Overall_'+mode] = rb
             if mode == 'Dynamic':
                 bg2 = QButtonGroup(layouts)
@@ -1248,7 +1248,7 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
                     bg2.addButton(rb)
                     rb.button_group = bg
                     rb.wid = mode
-                    rb.toggled.connect(self._on_click_dynamic_mode)
+                    rb.clicked.connect(self._on_click_dynamic_mode)
                     self._widget_registry['Dynamic_Mode_'+mode] = rb
         layoutv.addStretch()
 
@@ -1267,7 +1267,7 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
             rb.button_group = bg
             rb.wid = mode
             rb.sizePolicy().setRetainSizeWhenHidden(True)
-            rb.toggled.connect(self._on_click_const_mode)
+            rb.clicked.connect(self._on_click_const_mode)
             self._widget_registry['Const_'+mode] = rb
             layoutv.addWidget(rb)
 
@@ -1342,7 +1342,7 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
                 bg.addButton(rb)
                 rb.button_group = bg
                 rb.wid = range_name
-                rb.toggled.connect(self._on_click_range)
+                rb.clicked.connect(self._on_click_range)
                 if len(ranges) == 1:
                     layout.addWidget(rb, row_num, col_num+1, 1, 2)
                 else:
