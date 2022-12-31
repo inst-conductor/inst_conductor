@@ -28,7 +28,6 @@ from PyQt6.QtWidgets import (QAbstractSpinBox,
                              QDialogButtonBox,
                              QDoubleSpinBox,
                              QFileDialog,
-                             QInputDialog,
                              QLayout,
                              QMenuBar,
                              QPlainTextEdit,
@@ -42,7 +41,8 @@ from PyQt6.QtGui import QAction, QColor
 from PyQt6.QtPrintSupport import QPrintDialog
 
 from conductor.qasync import asyncSlot, asyncClose
-from conductor.qasync.qasync_helper import QAsyncMessageBox
+from conductor.qasync.qasync_helper import (QAsyncInputDialog,
+                                            QAsyncMessageBox)
 
 
 class ConfigureWidgetBase(QWidget):
@@ -134,16 +134,18 @@ class ConfigureWidgetBase(QWidget):
 
         return central_widget
 
-    def _menu_do_refresh_configuration(self):
+    @asyncSlot()
+    async def _menu_do_refresh_configuration(self):
         """Execute Configuration:Refresh from instrument menu option."""
-        self.refresh()
+        await self.refresh()
 
     @asyncSlot()
     async def _menu_do_rename_device(self):
         """Execute Device:Rename menu option."""
-        new_name, ok = QInputDialog.getText(self, 'Change device name',
-                                            'Device name:',
-                                            text=self._inst.name)
+        new_name, ok = await QAsyncInputDialog.getText(self,
+                                                       'Change device name',
+                                                       'Device name:',
+                                                       text=self._inst.name)
         if ok and new_name != self._inst.name:
             if new_name in self._main_window.device_names:
                 QAsyncMessageBox.critical(self, 'Duplicate Name',

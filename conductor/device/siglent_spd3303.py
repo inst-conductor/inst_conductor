@@ -795,7 +795,7 @@ Connected to {self._inst.resource_name}
         msg = """Alt+A       Channel 1 ON/OFF
 Alt+B       Channel 2 ON/OFF
 Alt+F       All channels OFF
-Alt+N       All channels ON
+Alt+N      All channels ON
 """
         QAsyncMessageBox.about(self, 'Keyboard Shortcuts', msg)
 

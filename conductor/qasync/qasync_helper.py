@@ -28,7 +28,7 @@ import functools
 import sys
 
 from PyQt6.QtCore import pyqtSlot as Slot
-from PyQt6.QtWidgets import QFileDialog, QMessageBox
+from PyQt6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 
 
 def asyncSlotSender(*args, **kwargs):
@@ -88,8 +88,7 @@ class QAsyncFileDialog:
         result = await dialog_async_exec(dialog)
         if result == 1: # QFileDialog.AcceptMode.AcceptSave:
             return dialog.selectedFiles()
-        else:
-            return []
+        return []
 
     @staticmethod
     async def getOpenFileName(parent, selectedFilter=None, **kwargs):
@@ -104,8 +103,7 @@ class QAsyncFileDialog:
         result = await dialog_async_exec(dialog)
         if result == 1: # QFileDialog.AcceptMode.AcceptOpen:
             return dialog.selectedFiles()
-        else:
-            return []
+        return []
 
 
 class QAsyncMessageBox:
@@ -134,3 +132,14 @@ class QAsyncMessageBox:
     def about(parent, title, text, buttons=QMessageBox.StandardButton.Ok):
         dialog = QMessageBox(QMessageBox.Icon.NoIcon, title, text, buttons, parent)
         return dialog_async_exec(dialog)
+
+
+class QAsyncInputDialog:
+    @staticmethod
+    async def getText(parent, title, label, text=''):
+        dialog = QInputDialog(parent)
+        dialog.setWindowTitle(title)
+        dialog.setLabelText(label)
+        dialog.setTextValue(text)
+        result = await dialog_async_exec(dialog)
+        return dialog.textValue(), result
