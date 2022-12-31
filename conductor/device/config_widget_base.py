@@ -41,8 +41,9 @@ from PyQt6.QtCore import Qt, QAbstractTableModel, QTimer
 from PyQt6.QtGui import QAction, QColor
 from PyQt6.QtPrintSupport import QPrintDialog
 
-from qasync import asyncSlot, asyncClose
-from .qasync_helper import QAsyncMessageBox
+from conductor.qasync import asyncSlot, asyncClose
+from conductor.qasync.qasync_helper import QAsyncMessageBox
+
 
 class ConfigureWidgetBase(QWidget):
     """The base class for all instrument configuration widgets.

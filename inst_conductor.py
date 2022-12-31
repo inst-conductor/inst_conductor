@@ -25,10 +25,10 @@ import asyncio
 import functools
 import sys
 
-import qasync
-from qasync import QApplication
+import conductor.qasync
+from conductor.qasync import QApplication
 
-from main_window import MainWindow
+from conductor.main_window import MainWindow
 
 app = QApplication.instance()
 
@@ -62,6 +62,6 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        qasync.run(main())
+        conductor.qasync.run(main())
     except asyncio.exceptions.CancelledError:
         sys.exit(0)

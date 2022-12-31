@@ -117,18 +117,19 @@ from PyQt6.QtWidgets import (QWidget,
                              QVBoxLayout)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence, QShortcut
-
-from qasync import asyncSlot
-from .qasync_helper import asyncSlotSender, QAsyncFileDialog, QAsyncMessageBox
-
 import pyqtgraph as pg
 
-from .config_widget_base import (ConfigureWidgetBase,
-                                 DoubleSpinBoxDelegate,
-                                 ListTableModel,
-                                 MultiSpeedSpinBox,
-                                 PrintableTextDialog)
-from .device import Device4882
+from conductor.qasync import asyncSlot
+from conductor.qasync.qasync_helper import (asyncSlotSender,
+                                            QAsyncFileDialog,
+                                            QAsyncMessageBox)
+
+from conductor.device.config_widget_base import (ConfigureWidgetBase,
+                                                 DoubleSpinBoxDelegate,
+                                                 ListTableModel,
+                                                 MultiSpeedSpinBox,
+                                                 PrintableTextDialog)
+from conductor.device import Device4882
 
 
 class InstrumentSiglentSDL1000(Device4882):
@@ -808,7 +809,7 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         self._list_mode_timer.setInterval(250)
         self._list_mode_timer.start()
 
-        self._measurement_interval = 250 # ms
+        self._measurement_interval = 0 # 250 # ms
 
 
     ######################
@@ -1795,7 +1796,7 @@ Alt+T       Trigger
     @asyncSlot()
     async def _menu_do_save_configuration(self):
         """Save the current configuration to a file."""
-        fn = QAsyncFileDialog.getSaveFileName(
+        fn = await QAsyncFileDialog.getSaveFileName(
             self, caption='Save Configuration',
             filter='SDL Configuration (*.sdlcfg)',
             selectedFilter='SDL Configuration (*.sdlcfg)',

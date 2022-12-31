@@ -24,6 +24,7 @@
 
 from collections import namedtuple
 
+
 class InstrumentConfiguration(object):
     """Class representing the configuration of a SCPI instrument.
 

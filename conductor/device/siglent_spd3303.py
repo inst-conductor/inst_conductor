@@ -52,18 +52,19 @@ from PyQt6.QtWidgets import (QGridLayout,
                              QWidget)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence, QShortcut
-
-from qasync import asyncSlot
-from .qasync_helper import asyncSlotSender, QAsyncFileDialog, QAsyncMessageBox
-
 import pyqtgraph as pg
 
-from .config_widget_base import (ConfigureWidgetBase,
-                                 DoubleSpinBoxDelegate,
-                                 ListTableModel,
-                                 LongClickButton,
-                                 MultiSpeedSpinBox)
-from .device import Device4882
+from conductor.qasync import asyncSlot
+from conductor.qasync.qasync_helper import (asyncSlotSender,
+                                            QAsyncFileDialog,
+                                            QAsyncMessageBox)
+
+from conductor.device.config_widget_base import (ConfigureWidgetBase,
+                                                 DoubleSpinBoxDelegate,
+                                                 ListTableModel,
+                                                 LongClickButton,
+                                                 MultiSpeedSpinBox)
+from conductor.device import Device4882
 
 
 class InstrumentSiglentSPD3303(Device4882):
@@ -227,7 +228,7 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
         self._timer_mode_timer.setInterval(250)
         self._timer_mode_timer.start()
 
-        self._measurement_interval = 250 # ms
+        self._measurement_interval = 0 # 250 # ms
 
 
     ######################

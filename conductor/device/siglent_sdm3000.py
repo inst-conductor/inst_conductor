@@ -78,12 +78,14 @@ from PyQt6.QtWidgets import (QWidget,
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence
 
-from qasync import asyncSlot
-from .qasync_helper import asyncSlotSender, QAsyncFileDialog, QAsyncMessageBox
+from conductor.qasync import asyncSlot
+from conductor.qasync.qasync_helper import (asyncSlotSender,
+                                            QAsyncFileDialog,
+                                            QAsyncMessageBox)
 
-from .config_widget_base import (ConfigureWidgetBase,
-                                 MultiSpeedSpinBox)
-from .device import Device4882
+from conductor.device.config_widget_base import (ConfigureWidgetBase,
+                                                 MultiSpeedSpinBox)
+from conductor.device import Device4882
 
 
 class InstrumentSiglentSDM3000(Device4882):
@@ -374,7 +376,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
 
         self._initialize_measurements_and_triggers()
 
-        self._measurement_interval = 250 # ms
+        self._measurement_interval = 0 #250 # ms
 
 
     ######################

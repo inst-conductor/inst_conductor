@@ -23,11 +23,14 @@
 
 import asyncio
 from collections import namedtuple
+import csv
 import itertools
 import math
 import platform
 import sys
 import time
+
+import numpy as np
 
 from PyQt6.QtWidgets import (QButtonGroup,
                              QComboBox,
@@ -49,15 +52,14 @@ from PyQt6.QtWidgets import (QButtonGroup,
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence
 
-from qasync import asyncSlot, asyncClose
-from device.qasync_helper import asyncSlotSender, QAsyncFileDialog, QAsyncMessageBox
+from conductor.qasync import asyncSlot, asyncClose
+from conductor.qasync.qasync_helper import (asyncSlotSender,
+                                            QAsyncFileDialog,
+                                            QAsyncMessageBox)
 
-import csv
-import numpy as np
-
-import device
-from plot_histogram_window import PlotHistogramWindow
-from plot_xy_window import PlotXYWindow
+import conductor.device as device
+from conductor.plot_histogram_window import PlotHistogramWindow
+from conductor.plot_xy_window import PlotXYWindow
 
 
 class IPAddressDialog(QDialog):
@@ -411,7 +413,7 @@ class MainWindow(QWidget):
     @asyncSlot()
     async def _on_click_save_csv(self):
         """Handle Save CSV button."""
-        fn = QAsyncFileDialog.getSaveFileName(
+        fn = await QAsyncFileDialog.getSaveFileName(
             self, caption='Save Measurements as CSV',
             filter='CSV (*.csv);;All (*.*)',
             selectedFilter='CSV (*.csv)',
