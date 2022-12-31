@@ -731,7 +731,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                     bg.addButton(rb)
                     rb.button_group = bg
                     rb.wid = (paramset_num, mode)
-                    rb.toggled.connect(self._on_click_overall_mode)
+                    rb.clicked.connect(self._on_click_overall_mode)
                     self._widget_registry[paramset_num][f'Overall_{mode}'] = rb
 
             layouts.addStretch()
@@ -779,7 +779,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                     bg.addButton(rb)
                     rb.button_group = bg
                     rb.wid = (paramset_num, range_name)
-                    rb.toggled.connect(self._on_click_range)
+                    rb.clicked.connect(self._on_click_range)
                     row_num, col_num = divmod(range_num, 4)
                     layout.addWidget(rb, row_num+1, col_num)
                     self._widget_registry[paramset_num][
@@ -801,7 +801,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                 bg.addButton(rb)
                 rb.button_group = bg
                 rb.wid = (paramset_num, speed)
-                rb.toggled.connect(self._on_click_speed)
+                rb.clicked.connect(self._on_click_speed)
                 layouth2.addWidget(rb)
                 self._widget_registry[paramset_num][f'Speed_{speed}'] = rb
             layouth2.addStretch()
@@ -812,7 +812,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
             w = QCheckBox('DC Filter')
             w.wid = paramset_num
             layouth2.addWidget(w)
-            w.toggled.connect(self._on_click_dcfilter)
+            w.clicked.connect(self._on_click_dcfilter)
             self._widget_registry[paramset_num]['DCFilter'] = w
 
             # Impedance selection
@@ -826,7 +826,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                 bg.addButton(rb)
                 rb.button_group = bg
                 rb.wid = (paramset_num, imp)
-                rb.toggled.connect(self._on_click_impedance)
+                rb.clicked.connect(self._on_click_impedance)
                 layouth2.addWidget(rb)
                 self._widget_registry[paramset_num][f'Impedance_{imp}'] = rb
             layouth2.addStretch()
@@ -849,7 +849,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
             w = QCheckBox('Relative Mode On')
             w.wid = paramset_num
             layoutv2.addWidget(w)
-            w.toggled.connect(self._on_click_rel_mode_on)
+            w.clicked.connect(self._on_click_rel_mode_on)
             self._widget_registry[paramset_num]['RelModeOn'] = w
 
             layouth2 = QHBoxLayout()
@@ -879,7 +879,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                 bg.addButton(rb)
                 rb.button_group = bg
                 rb.wid = (paramset_num, imp)
-                rb.toggled.connect(self._on_click_rel_mode_source)
+                rb.clicked.connect(self._on_click_rel_mode_source)
                 layouth2.addWidget(rb)
                 self._widget_registry[paramset_num][f'RelModeSource_{imp}'] = rb
             layouth2.addStretch()
@@ -1058,11 +1058,13 @@ Connected to {self._inst.resource_name}
             return
         if not rb.isChecked():
             return
+        paramset_num, mode = rb.wid
+        if self._debug:
+            print(f'Set overall mode #{paramset_num}')
         async with self._config_lock:
-            paramset_num, mode = rb.wid
             self._param_state[paramset_num][':FUNCTION'] = self._mode_to_scpi(mode)
             if self._debug:
-                print('Set overall mode')
+                print(f'  :FUNCTION="{self._mode_to_scpi(mode)}" ({mode})')
                 print(self._param_state[paramset_num])
             self._update_widgets(paramset_num)
 
@@ -1073,10 +1075,13 @@ Connected to {self._inst.resource_name}
             return
         if not rb.isChecked():
             return
+        paramset_num, val = rb.wid
+        if self._debug:
+            print(f'Set range #{paramset_num}')
         async with self._config_lock:
-            paramset_num, val = rb.wid
             info = self._cur_mode_param_info(paramset_num)
             mode_name = info['mode_name']
+            orig_val = val
             match mode_name:
                 case 'FREQ':
                     mode_name = 'FREQ:VOLT'
@@ -1085,11 +1090,14 @@ Connected to {self._inst.resource_name}
                     val = self._range_v_disp_to_scpi_write(val)
                 case 'CURR:DC' | 'CURR:AC':
                     val = self._range_i_disp_to_scpi_write(val)
-                case 'RES' | 'FRES:AC':
+                case 'RES' | 'FRES':
                     val = self._range_r_disp_to_scpi_write(val)
                 case 'CAP':
                     val = self._range_c_disp_to_scpi_write(val)
             self._param_state[paramset_num][f':{mode_name}:RANGE'] = val
+            if self._debug:
+                print(f'  :{mode_name}:RANGE="{val}" ({orig_val})')
+                print(self._param_state[paramset_num])
             self._update_widgets(paramset_num)
 
     @asyncSlotSender()
@@ -1097,14 +1105,19 @@ Connected to {self._inst.resource_name}
         """Handle clicking on a V/I/R/C Auto range checkbox."""
         if self._disable_callbacks: # Prevent recursive calls
             return
+        paramset_num = cb.wid
+        if self._debug:
+            print(f'Set range auto #{paramset_num}')
         async with self._config_lock:
             val = cb.isChecked()
-            paramset_num = cb.wid
             info = self._cur_mode_param_info(paramset_num)
             mode_name = info['mode_name']
             if mode_name == 'FREQ':
                 mode_name = 'FREQ:VOLT'
             self._param_state[paramset_num][f':{mode_name}:RANGE:AUTO'] = val
+            if self._debug:
+                print(f'  :{mode_name}:RANGE:AUTO="{val}')
+                print(self._param_state[paramset_num])
             self._update_widgets(paramset_num)
 
     @asyncSlotSender()
@@ -1114,13 +1127,17 @@ Connected to {self._inst.resource_name}
             return
         if not rb.isChecked():
             return
-        # XXX THIS KEEPS FREEZING EVERYTHING - WHY?
+        paramset_num, val = rb.wid
+        if self._debug:
+            print(f'Set speed #{paramset_num}')
         async with self._config_lock:
-            paramset_num, val = rb.wid
             info = self._cur_mode_param_info(paramset_num)
             mode_name = info['mode_name']
-            val = self._speed_disp_to_scpi_write(val)
-            self._param_state[paramset_num][f':{mode_name}:NPLC'] = val
+            scpi_val = self._speed_disp_to_scpi_write(val)
+            self._param_state[paramset_num][f':{mode_name}:NPLC'] = scpi_val
+            if self._debug:
+                print(f'  :{mode_name}:NPLC="{scpi_val} ({val})')
+                print(self._param_state[paramset_num])
             self._update_widgets(paramset_num)
 
     @asyncSlotSender()
@@ -1128,12 +1145,17 @@ Connected to {self._inst.resource_name}
         """Handle clicking on the DC Filter checkbox."""
         if self._disable_callbacks: # Prevent recursive calls
             return
+        paramset_num = cb.wid
+        if self._debug:
+            print(f'Set range auto #{paramset_num}')
         async with self._config_lock:
-            paramset_num = cb.wid
             val = cb.isChecked()
             info = self._cur_mode_param_info(paramset_num)
             mode_name = info['mode_name']
             self._param_state[paramset_num][f':{mode_name}:FILTER:STATE'] = val
+            if self._debug:
+                print(f'  :{mode_name}:FILTER:STATE="{val}"')
+                print(self._param_state[paramset_num])
             self._update_widgets(paramset_num)
 
     @asyncSlotSender()
@@ -1143,11 +1165,16 @@ Connected to {self._inst.resource_name}
             return
         if not rb.isChecked():
             return
+        paramset_num, val = rb.wid
+        if self._debug:
+            print(f'Set impedance #{paramset_num}')
         async with self._config_lock:
-            paramset_num, val = rb.wid
             info = self._cur_mode_param_info(paramset_num)
             mode_name = info['mode_name']
             self._param_state[paramset_num][f':{mode_name}:IMP'] = val
+            if self._debug:
+                print(f'  :{mode_name}:IMP="{val}')
+                print(self._param_state[paramset_num])
             self._update_widgets(paramset_num)
 
     def _on_click_rel_mode_on(self):
@@ -1519,7 +1546,8 @@ Connected to {self._inst.resource_name}
         # which then call this routine again in the middle of it already doing its
         # work.
         self._disable_callbacks = True
-
+        if self._debug:
+            print('Disable callbacks True')
         if paramset_num == 0:
             # Global
             # Now we enable or disable widgets by first scanning through the "General"
@@ -1639,9 +1667,11 @@ Connected to {self._inst.resource_name}
                         for trial_widget in self._widget_registry[paramset_num]:
                             if re.fullmatch(widget_main, trial_widget):
                                 widget = self._widget_registry[paramset_num][trial_widget]
+                                print(f'Enabled #{paramset_num} {trial_widget}')
                                 widget.setEnabled(True)
                                 checked = (trial_widget.upper()
                                            .endswith('_'+str(val).upper()))
+                                print(f'Checked {checked}  #{paramset_num} {trial_widget}')
                                 widget.setChecked(checked)
                     case _:
                         assert False, f'Unknown param type {param_type}'
@@ -1655,6 +1685,8 @@ Connected to {self._inst.resource_name}
             self._statusbar.showMessage(status_msg)
 
         self._disable_callbacks = False
+        if self._debug:
+            print('Disable callbacks False')
 
     def _cur_mode_param_info(self, paramset_num):
         """Get the parameter info structure for the current mode."""
