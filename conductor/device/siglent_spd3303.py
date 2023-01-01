@@ -64,7 +64,7 @@ from conductor.device.config_widget_base import (ConfigureWidgetBase,
                                                  ListTableModel,
                                                  LongClickButton,
                                                  MultiSpeedSpinBox)
-from conductor.device import Device4882
+from conductor.device import Device4882, NotConnectedError
 
 
 class InstrumentSiglentSPD3303(Device4882):
@@ -347,17 +347,20 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
     @asyncSlot()
     async def _update_measurements_and_triggers(self):
         """Read current values, update control panel display, return the values."""
+        measurements = self._cached_measurements
+        triggers = self._cached_triggers
+
         async with self._config_lock:
-            status = int((await self._inst.query('SYST:STATUS?')).replace('0x', ''),
-                         base=16)
+            try:
+                status = int((await self._inst.query('SYST:STATUS?')).replace('0x', ''),
+                            base=16)
+            except NotConnectedError:
+                return
             self._psu_cc[0] = bool(status & 0x01)
             self._psu_cc[1] = bool(status & 0x02)
             self._psu_on_off[0] = bool(status & 0x10)
             self._psu_on_off[1] = bool(status & 0x20)
             self._update_output_on_off_buttons()
-
-        measurements = self._cached_measurements
-        triggers = self._cached_triggers
 
         async with self._config_lock:
             triggers['CH1On']['val'] = self._psu_on_off[0]
@@ -378,7 +381,10 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                 w.setText('---  V')
             else:
                 async with self._config_lock:
-                    voltage = await self._inst.measure_voltage(ch+1)
+                    try:
+                        voltage = await self._inst.measure_voltage(ch+1)
+                    except NotConnectedError:
+                        return
                     w.setText(f'{voltage:6.3f} V')
             measurements[f'Voltage{ch+1}']['val'] = voltage
 
@@ -388,7 +394,10 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                 w.setText('---  A')
             else:
                 async with self._config_lock:
-                    current = await self._inst.measure_current(ch+1)
+                    try:
+                        current = await self._inst.measure_current(ch+1)
+                    except NotConnectedError:
+                        return
                     w.setText(f'{current:5.3f} A')
             measurements[f'Current{ch+1}']['val'] = current
 
@@ -398,7 +407,10 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                 w.setText('---  W')
             else:
                 async with self._config_lock:
-                    power = await self._inst.measure_power(ch+1)
+                    try:
+                        power = await self._inst.measure_power(ch+1)
+                    except NotConnectedError:
+                        return
                     w.setText(f'{power:6.3f} W')
             measurements[f'Power{ch+1}']['val'] = power
 

@@ -176,13 +176,14 @@ class ConfigureWidgetBase(QWidget):
         """Execute Help:About menu option."""
         raise NotImplementedError
 
-    @asyncClose
-    async def closeEvent(self, event):
+    # @asyncSlot()
+    def closeEvent(self, event):
         """Handle window close event by disconnecting from the instrument."""
-        await self._inst.disconnect()
+        # XXX
+        # await self._inst.disconnect()
         # Notify the main widget so that all of the UI lists and whatnot can be updated.
-        await self._main_window.device_window_closed(self._inst)
-
+        # await self._main_window.device_window_closed(self._inst)
+        super().closeEvent(event)
 
 class PrintableTextDialog(QDialog):
     """Text-containing Dialog that can be saved and printed."""

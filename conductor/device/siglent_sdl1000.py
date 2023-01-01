@@ -129,7 +129,7 @@ from conductor.device.config_widget_base import (ConfigureWidgetBase,
                                                  ListTableModel,
                                                  MultiSpeedSpinBox,
                                                  PrintableTextDialog)
-from conductor.device import Device4882
+from conductor.device import Device4882, NotConnectedError
 
 
 class InstrumentSiglentSDL1000(Device4882):
@@ -973,10 +973,16 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         """Read current values and update control panel display."""
         # Update the load on/off state in case we hit a protection limit
         async with self._config_lock:
-            input_state = int(await self._inst.query(':INPUT:STATE?'))
+            try:
+                input_state = int(await self._inst.query(':INPUT:STATE?'))
+            except NotConnectedError:
+                return
             if self._param_state[':INPUT:STATE'] != input_state:
                 # No need to update the instrument, since it changed the state for us
-                await self._update_load_state(input_state, update_inst=False)
+                try:
+                    await self._update_load_state(input_state, update_inst=False)
+                except NotConnectedError:
+                    return
 
         measurements = self._cached_measurements
         triggers = self._cached_triggers
@@ -989,14 +995,20 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         if self._enable_measurement_v:
             # Voltage is available regardless of the input state
             async with self._config_lock:
-                voltage = await self._inst.measure_voltage()
+                try:
+                    voltage = await self._inst.measure_voltage()
+                except NotConnectedError:
+                    return
         measurements['Voltage']['val'] = voltage
 
         current = None
         if self._enable_measurement_c and input_state:
             # Current is only available when the load is on
             async with self._config_lock:
-                current = await self._inst.measure_current()
+                try:
+                    current = await self._inst.measure_current()
+                except NotConnectedError:
+                    return
         measurements['Current']['val'] = current
 
         power = None
@@ -1004,7 +1016,10 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         if self._enable_measurement_p and input_state:
             # Power is only available when the load is on
             async with self._config_lock:
-                power = await self._inst.measure_power()
+                try:
+                    power = await self._inst.measure_power()
+                except NotConnectedError:
+                    return
         measurements['Power']['val'] = power
 
         resistance = None
@@ -1012,7 +1027,10 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         if self._enable_measurement_r and input_state:
             # Resistance is only available when the load is on
             async with self._config_lock:
-                resistance = await self._inst.measure_resistance()
+                try:
+                    resistance = await self._inst.measure_resistance()
+                except NotConnectedError:
+                    return
         measurements['Resistance']['val'] = resistance
 
         trise = None
@@ -1020,7 +1038,10 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         if self._enable_measurement_trise and input_state:
             # Trise is only available when the load is on
             async with self._config_lock:
-                trise = await self._inst.measure_trise()
+                try:
+                    trise = await self._inst.measure_trise()
+                except NotConnectedError:
+                    return
         measurements['TRise']['val'] = trise
 
         tfall = None
@@ -1028,7 +1049,10 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         if self._enable_measurement_tfall and input_state:
             # Tfall is only available when the load is on
             async with self._config_lock:
-                tfall = await self._inst.measure_tfall()
+                try:
+                    tfall = await self._inst.measure_tfall()
+                except NotConnectedError:
+                    return
         measurements['TFall']['val'] = tfall
 
         disch_time = None
@@ -1040,11 +1064,20 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
             if self._batt_log_initial_voltage is None:
                 self._batt_log_initial_voltage = voltage
             async with self._config_lock:
-                disch_time = await self._inst.measure_battery_time()
+                try:
+                    disch_time = await self._inst.measure_battery_time()
+                except NotConnectedError:
+                    return
             async with self._config_lock:
-                disch_cap = await self._inst.measure_battery_capacity()
+                try:
+                    disch_cap = await self._inst.measure_battery_capacity()
+                except NotConnectedError:
+                    return
             async with self._config_lock:
-                add_cap = await self._inst.measure_battery_add_capacity()
+                try:
+                    add_cap = await self._inst.measure_battery_add_capacity()
+                except NotConnectedError:
+                    return
 
             # When the LOAD is OFF, we have already updated the ADDCAP to include the
             # current test results, so we don't want to add it in a second time

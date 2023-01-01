@@ -10,7 +10,7 @@ Next tasks:
 - Put timestamps on measurements in dictionary
 - Clean up widget init code to have more standardized names
 - SDL make reset test log more obvious when there is something in the log
-
+- Fix closeEvent handler
 
 ** PyInstaller **
 

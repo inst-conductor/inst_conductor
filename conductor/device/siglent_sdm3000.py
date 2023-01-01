@@ -85,7 +85,7 @@ from conductor.qasync.qasync_helper import (asyncSlotSender,
 
 from conductor.device.config_widget_base import (ConfigureWidgetBase,
                                                  MultiSpeedSpinBox)
-from conductor.device import Device4882
+from conductor.device import Device4882, NotConnectedError
 
 
 class InstrumentSiglentSDM3000(Device4882):
@@ -561,13 +561,19 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                     not self._widget_registry[paramset_num]['Enable'].isChecked()):
                     continue
                 # Update the instrument for the current paramset
-                self._last_measurement_param_state = (
-                    await self._update_instrument(paramset_num,
-                                                  self._last_measurement_param_state))
+                try:
+                    self._last_measurement_param_state = (
+                        await self._update_instrument(paramset_num,
+                                                    self._last_measurement_param_state))
+                except NotConnectedError:
+                    return
                 if self._inst._is_fake:
                     val = random.random()
                 else:
-                    val = float(await self._inst.query('READ?', timeout=10))
+                    try:
+                        val = float(await self._inst.query('READ?', timeout=10))
+                    except NotConnectedError:
+                        return
                 if abs(val) == 9.9e37:
                     val = None
                 mode = self._scpi_to_mode(self._param_state[paramset_num][':FUNCTION'])

@@ -232,13 +232,12 @@ class Device(object):
             raise NotConnectedError
         if self._is_fake:
             return
-        # try:
-        self._writer.write((s+'\n').encode())
-        await self._writer.drain()
-        # except pyvisa.errors.VisaIOError:
-        #     self.disconnect()
-        #     raise ContactLostError
-        # self._resource.timeout = old_timeout
+        try:
+            self._writer.write((s+'\n').encode())
+            await self._writer.drain()
+        except ConnectionResetError:
+                await self.disconnect()
+                raise NotConnectedError
 
     async def write(self, s):
         """VISA write, appending termination characters."""
@@ -248,14 +247,13 @@ class Device(object):
             print(f'write "{s}"')
         if self._is_fake:
             return
-        # try:
-        async with self._io_lock:
-            self._writer.write((s+'\n').encode())
-            await self._writer.drain()
-        # except pyvisa.errors.VisaIOError:
-        #     self.disconnect()
-        #     raise ContactLostError
-        # self._resource.timeout = old_timeout
+        try:
+            async with self._io_lock:
+                self._writer.write((s+'\n').encode())
+                await self._writer.drain()
+        except ConnectionResetError:
+            await self.disconnect()
+            raise NotConnectedError
 
     async def write_raw(self, s):
         """VISA write, no termination characters."""
@@ -265,12 +263,12 @@ class Device(object):
             print(f'write_raw "{s}"')
         if self._is_fake:
             return
-        # try:
-        self._writer.write(s.encode())
-        await self._writer.drain()
-        # except pyvisa.errors.VisaIOError:
-        #     self.disconnect()
-        #     raise ContactLostError
+        try:
+            self._writer.write(s.encode())
+            await self._writer.drain()
+        except ConnectionResetError:
+            await self.disconnect()
+            raise NotConnectedError
 
     ### Internal support routines
 

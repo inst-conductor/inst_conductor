@@ -967,6 +967,8 @@ Copyright 2022, Robert S. French"""
         # Close all the sub-windows, allowing them to shut down peacefully
         # Closing a config window also removes it from the open resources list,
         # so we have to make a copy of the list before iterating.
+        event.accept()
+        sys.exit(0)
         async with self._resources_lock:
             for ra in self._open_resources[:]:
                 ra.config_widget.close()
