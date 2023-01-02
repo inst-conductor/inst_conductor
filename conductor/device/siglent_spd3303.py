@@ -530,13 +530,15 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
     def _init_widgets_add_channel(self, ch):
         """Set up the widgets for one channel."""
         frame = QGroupBox(f'Channel {ch+1}')
+        frame.setObjectName(f'Ch{ch+1}')
         if ch == 0:
             bgcolor = '#a0ff80'
         else:
             bgcolor = '#ffff20'
-        ss = f"""QGroupBox::title {{ subcontrol-position: top center;
-                                      background-color: {bgcolor}; color: black; }}"""
-        frame.setStyleSheet(ss)
+        ss = f"""QGroupBox {{ border: 5px solid {bgcolor}; }}
+                 QGroupBox::title {{ subcontrol-position: top center;
+                                     background-color: {bgcolor}; color: black; }}"""
+        # frame.setStyleSheet(ss)
 
         vert_layout = QVBoxLayout(frame)
         vert_layout.setContentsMargins(0, 0, 0, 0)

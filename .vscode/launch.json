@@ -16,6 +16,14 @@
             ]
         },
         {
+            "name": "No Inst",
+            "type": "python",
+            "request": "launch",
+            "program": "inst_conductor.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
             "name": "SDM",
             "type": "python",
             "request": "launch",

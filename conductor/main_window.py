@@ -37,6 +37,7 @@ from PyQt6.QtWidgets import (QButtonGroup,
                              QDialog,
                              QDialogButtonBox,
                              QDoubleSpinBox,
+                             QFrame,
                              QGridLayout,
                              QGroupBox,
                              QHBoxLayout,
@@ -56,6 +57,7 @@ from conductor.qasync import asyncSlot, asyncClose
 from conductor.qasync.qasync_helper import (asyncSlotSender,
                                             QAsyncFileDialog,
                                             QAsyncMessageBox)
+from conductor.stylesheet import QSS_THEME
 
 import conductor.device as device
 from conductor.plot_histogram_window import PlotHistogramWindow
@@ -167,6 +169,8 @@ class MainWindow(QWidget):
 
     def _init_widgets(self):
         """Initialize the top-level widgets."""
+        self.setStyleSheet(QSS_THEME)
+
         ### Layout the widgets
 
         layouttopv = QVBoxLayout()
@@ -181,7 +185,7 @@ class MainWindow(QWidget):
         self._menubar.setStyleSheet('margin: 0px; padding: 0px;')
 
         self._menubar_device = self._menubar.addMenu('&Device')
-        action = QAction('&Open IP address...', self)
+        action = QAction('&Open with IP address...', self)
         action.setShortcut(QKeySequence('Ctrl+O'))
         action.triggered.connect(self._menu_do_open_ip)
         self._menubar_device.addAction(action)
@@ -224,8 +228,8 @@ class MainWindow(QWidget):
         layouth = QHBoxLayout()
         layoutv.addLayout(layouth)
 
-        frame = QGroupBox('Measurement and Acquisition')
-        frame.setStyleSheet("""QGroupBox { min-width: 20em; max-width: 20em; }""")
+        frame = QGroupBox('Interval-Based Recording')
+        self.setStyleSheet("""QGroupBox { min-width: 20em; max-width: 20em; }""")
         layoutv2 = QVBoxLayout(frame)
         layouth.addWidget(frame)
 
@@ -236,7 +240,7 @@ class MainWindow(QWidget):
         layouth2.addWidget(input)
         input.setAlignment(Qt.AlignmentFlag.AlignRight)
         input.setDecimals(1)
-        input.setRange(0.5, 60)
+        input.setRange(0.5, 86400)
         input.setSuffix(' s')
         input.setValue(1)
         input.setSingleStep(0.5)
@@ -246,51 +250,23 @@ class MainWindow(QWidget):
 
         layouth2 = QHBoxLayout()
         layoutv2.addLayout(layouth2)
-        button = QPushButton('\u23F5 Record')
-        ss = """QPushButton { min-width: 4.5em; max-width: 4.5em;
-                              min-height: 1.5em; max-height: 1.5em;
-                              border-radius: 0.5em; border: 2px solid black;
-                              font-weight: bold;
-                              background-color: #80ff40; }
-                QPushButton::pressed { border: 3px solid black; }"""
-        button.setStyleSheet(ss)
-        self._widget_registry['GoButton'] = button
-        button.clicked.connect(self._on_click_go)
-        layouth2.addWidget(button)
-        button = QPushButton('\u23F8 Pause')
-        ss = """QPushButton { min-width: 4.5em; max-width: 4.5em;
-                              min-height: 1.5em; max-height: 1.5em;
-                              border-radius: 0.5em; border: 2px solid black;
-                              font-weight: bold;
-                              background-color: #ff8080; }
-                QPushButton::pressed { border: 3px solid black; }"""
-        button.setStyleSheet(ss)
-        self._widget_registry['PauseButton'] = button
-        button.clicked.connect(self._on_click_pause)
-        layouth2.addWidget(button)
-        button = QPushButton('\u26A0 Erase All Data \u26A0')
-        ss = """QPushButton { min-width: 7.5em; max-width: 7.5em;
-                              min-height: 1.5em; max-height: 1.5em;
-                              border-radius: 0.5em; border: 2px solid red;
-                              background: black; color: red; }
-                QPushButton::pressed { border: 3px solid red; }"""
-        button.setStyleSheet(ss)
+        layouth2.addWidget(QLabel('Acquire when:'))
         layouth2.addStretch()
-        layouth2.addWidget(button)
-        button.clicked.connect(self._on_erase_all)
 
         layoutg = QGridLayout()
         layoutv2.addLayout(layoutg)
         bg = QButtonGroup(layoutg)
 
-        rb = QRadioButton('Manual')
+        rb = QRadioButton('Always')
+        rb.setStyleSheet('padding-left: 1.4em;') # Indent
         layoutg.addWidget(rb, 0, 0)
         bg.addButton(rb)
         rb.setChecked(True)
-        rb.wid = 'Manual'
+        rb.wid = 'Always'
         rb.toggled.connect(self._on_click_acquisition_mode)
 
         rb = QRadioButton('Instrument State:')
+        rb.setStyleSheet('padding-left: 1.4em;') # Indent
         layoutg.addWidget(rb, 1, 0)
         bg.addButton(rb)
         rb.setChecked(False)
@@ -306,6 +282,7 @@ class MainWindow(QWidget):
         layouth.addStretch()
 
         rb = QRadioButton('Measurement Value:')
+        rb.setStyleSheet('padding-left: 1.4em;') # Indent
         layoutg.addWidget(rb, 2, 0)
         bg.addButton(rb)
         rb.setChecked(False)
@@ -346,6 +323,45 @@ class MainWindow(QWidget):
         input.editingFinished.connect(self._on_value_changed_meas_comp)
         self._widget_registry['MeasurementValueComp'] = input
         layouth.addStretch()
+
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.HLine)
+        layoutv2.addWidget(divider)
+
+        layouth2 = QHBoxLayout()
+        layoutv2.addLayout(layouth2)
+        button = QPushButton('\u23F5 Record')
+        ss = """QPushButton { min-width: 4.5em; max-width: 4.5em;
+                              min-height: 1.5em; max-height: 1.5em;
+                              border-radius: 0.5em; border: 2px solid black;
+                              font-weight: bold;
+                              background-color: #80ff40; }
+                QPushButton::pressed { border: 3px solid black; }"""
+        button.setStyleSheet(ss)
+        self._widget_registry['GoButton'] = button
+        button.clicked.connect(self._on_click_go)
+        layouth2.addWidget(button)
+        button = QPushButton('\u23F8 Pause')
+        ss = """QPushButton { min-width: 4.5em; max-width: 4.5em;
+                              min-height: 1.5em; max-height: 1.5em;
+                              border-radius: 0.5em; border: 2px solid black;
+                              font-weight: bold;
+                              background-color: #ff8080; }
+                QPushButton::pressed { border: 3px solid black; }"""
+        button.setStyleSheet(ss)
+        self._widget_registry['PauseButton'] = button
+        button.clicked.connect(self._on_click_pause)
+        layouth2.addWidget(button)
+        button = QPushButton('\u26A0 Erase All Data \u26A0')
+        ss = """QPushButton { min-width: 7.5em; max-width: 7.5em;
+                              min-height: 1.5em; max-height: 1.5em;
+                              border-radius: 0.5em; border: 2px solid red;
+                              background: black; color: red; }
+                QPushButton::pressed { border: 3px solid red; }"""
+        button.setStyleSheet(ss)
+        layouth2.addStretch()
+        layouth2.addWidget(button)
+        button.clicked.connect(self._on_erase_all)
 
         layouth = QHBoxLayout()
         layoutv2.addLayout(layouth)
@@ -426,7 +442,7 @@ class MainWindow(QWidget):
                 return
             with open(fn, 'w', newline='') as fp:
                 csvw = csv.writer(fp, )
-                header = ('Elapsed Time (s)', 'Absolute Time')
+                header = ['Elapsed Time (s)', 'Absolute Time']
                 meas_used_keys = []
                 for key in self._measurements:
                     if np.all(np.isnan(self._measurements[key])):
@@ -447,20 +463,23 @@ class MainWindow(QWidget):
                 csvw.writerow(header)
                 for idx, time_ in enumerate(self._measurement_times):
                     row = [time_ - self._measurement_times[0]]
-                    timestr = time.strftime('%Y/%m/%d %H:%M:%S',
-                                            time.localtime(time_))
+                    timestr = time.strftime('%Y/%m/%d %H:%M:%S', time.localtime(time_))
                     row.append(timestr)
                     for key in meas_used_keys:
                         meas = self._measurements[key][idx]
                         if np.isnan(meas):
                             row.append('')
                         else:
+                            if isinstance(meas, bool):
+                                meas = int(meas)
                             row.append(meas)
                     for key in trig_used_keys:
                         trig = self._triggers[key][idx]
                         if np.isnan(trig):
                             row.append('')
                         else:
+                            if isinstance(trig, bool):
+                                trig = int(trig)
                             row.append(trig)
                     csvw.writerow(row)
 

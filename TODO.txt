@@ -1,12 +1,8 @@
 Next tasks:
 - Fix QInputDialog.getText
 - Fix IP input dialog
-- SDL implement locking for configuration queries and changes
-- SDL disable all input during refresh()
-- SDL Fix bug where battery report shows up instantly when starting up already in batt mode
+- Convert everything to global style sheets
 - Put instrument prefixes on read/write/query debug messages
-- Implement async in SDM
-- Implement async in SPD
 - Put timestamps on measurements in dictionary
 - Clean up widget init code to have more standardized names
 - SDL make reset test log more obvious when there is something in the log
@@ -20,14 +16,19 @@ https://github.com/pyqtgraph/pyqtgraph/issues/1381
 
 ** General **
 
+- Alt+Mouse Wheel does not move the 0.001 digit like it should (known Qt bug)
+- Mouse wheel or up/down arrow should move digit at cursor position like a real instrument
 - Look into tab focus
 - Write help for each instrument
 - Add overall README file
-- Add error checking to opening resource and other VISA accesses
 - Add controllable parameters to each instrument (e.g. voltage and current level)
 
 ** Acquisition **
 
+- Crash when selecting trigger type
+- Change "Elapsed time" to "Logged span" or "Recorded span" or something
+- Erase All Data while Paused still records one data point
+- Remove border (and maybe background) from Acquiring/Waiting indicator
 - Implement better way to handle breaks between time sequences instead of just inserting
   a dummy NaN. Maybe separate lists of measurements that are then stitched together?
   Right now if there's a segment with only one measurement it isn't drawn.
@@ -42,6 +43,9 @@ https://github.com/pyqtgraph/pyqtgraph/issues/1381
 
 - Bug - sharing Y axis doesn't refresh the position of the Y axis label
 - Bug - Axes occasionally don't update in plot window
+- Figure out how to reset Y axes to default
+- When sharing Y axes, figure out what to do with the plot colors not agreeing with the
+  axis color
 - Add custom past time
 
 ** Histogram View **
@@ -74,16 +78,34 @@ between measurements
 
 ** SDL1000 **
 
+- Disable all input during refresh()
+- Fix bug where battery report shows up instantly when starting up already in batt mode
 - Program mode (and stop on fail)
 
 ** SPD **
 
-- Channel 3 indicator and control
+- Allow presets and timer to display at the same time
+- Shrink delay on long button press for presets
+- Indicate edit of V/A is in progress and not applied to instrument yet (background or
+  font)
+- Option to allow live update while changing V/A
+- Option to require Enter to change V/A, not just losing focus
+- Channel 3 indicator and control if possible
 - Maybe figure out a way to enable/disable measurements
 
 ** SDM **
 
 Siglent Technologies,SDM3055,SDM35FAQ1R1838,1.01.01.25
+
+- Setting auto range should grey out range radio buttons
+- Put measurements together with their parameters
+- Refresh from instrument: Show warning since it is only updating the first configuration
+  and overwriting the others. Also disable other measurements.
+- Add safety interlock for multiple measurements (e.g. no voltage and resistance)
+- Add better units on display (e.g. VDC or VAC)
+- Add sub-units on display (e.g. mVDC or uVDC)
+- Change colors to the side of each set of parameters to they are accessible to
+  color-blind people
 
 ** SDS **
 

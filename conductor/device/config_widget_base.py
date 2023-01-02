@@ -43,7 +43,7 @@ from PyQt6.QtPrintSupport import QPrintDialog
 from conductor.qasync import asyncSlot, asyncClose
 from conductor.qasync.qasync_helper import (QAsyncInputDialog,
                                             QAsyncMessageBox)
-
+from conductor.stylesheet import QSS_THEME
 
 class ConfigureWidgetBase(QWidget):
     """The base class for all instrument configuration widgets.
@@ -78,6 +78,8 @@ class ConfigureWidgetBase(QWidget):
         """
         QWidget.__init__(self)
         self.setWindowTitle(f'{self._inst.long_name} ({self._inst.name})')
+
+        self.setStyleSheet(QSS_THEME)
 
         layoutv = QVBoxLayout(self)
         layoutv.setContentsMargins(0, 0, 0, 0)

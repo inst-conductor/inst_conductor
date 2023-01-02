@@ -96,7 +96,8 @@ class _IocpProactor(windows_events.IocpProactor):
             if ms >= UINT32_MAX:
                 raise ValueError("timeout too big")
 
-        with QtCore.QMutexLocker(self._lock):
+        # XXX with QtCore.QMutexLocker(self._lock):
+        if True:
             while True:
                 # self._logger.debug('Polling IOCP with timeout {} ms in thread {}...'.format(
                 #     ms, threading.get_ident()))
