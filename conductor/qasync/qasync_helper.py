@@ -1,12 +1,12 @@
 ################################################################################
-# qasync_helper.py
+# conductor/qasync/qasync_helper.py
 #
 # This file is part of the inst_conductor software suite.
 #
 # It contains code necessary to make the qasync project (PyQt combined with
 # asyncio) work properly.
 #
-# Copyright 2022 Robert S. French (rfrench@rfrench.org)
+# Copyright 2023 Robert S. French (rfrench@rfrench.org)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -28,7 +28,15 @@ import functools
 import sys
 
 from PyQt6.QtCore import pyqtSlot as Slot
-from PyQt6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
+from PyQt6.QtWidgets import (QDialog,
+                             QDialogButtonBox,
+                             QFileDialog,
+                             QHBoxLayout,
+                             QInputDialog,
+                             QLabel,
+                             QLineEdit,
+                             QMessageBox,
+                             QVBoxLayout)
 
 
 def asyncSlotSender(*args, **kwargs):
@@ -143,3 +151,63 @@ class QAsyncInputDialog:
         dialog.setTextValue(text)
         result = await dialog_async_exec(dialog)
         return dialog.textValue(), result
+
+class IPAddressDialog(QDialog):
+    """Custom dialog that accepts and validates an IP address."""
+    def __init__(self, parent, title):
+        super().__init__(parent)
+
+        self.setWindowTitle(title)
+        layoutv = QVBoxLayout()
+        self.setLayout(layoutv)
+        layouth = QHBoxLayout()
+        layoutv.addSpacing(50)
+        layoutv.addLayout(layouth)
+        layoutv.addSpacing(50)
+        layouth.addSpacing(50)
+        layouth.addWidget(QLabel('IP Address:'))
+        self._ip_address = QLineEdit()
+        self._ip_address.setStyleSheet('max-width: 7.6em; font-family: "Courier New";')
+        self._ip_address.setInputMask('000.000.000.000;_')
+        self._ip_address.textChanged.connect(self._validator)
+        layouth.addWidget(self._ip_address)
+        layouth.addSpacing(50)
+
+        buttons = (QDialogButtonBox.StandardButton.Open |
+                   QDialogButtonBox.StandardButton.Cancel)
+        self._button_box = QDialogButtonBox(buttons)
+        self._button_box.accepted.connect(self.accept)
+        self._button_box.rejected.connect(self.reject)
+        self._button_box.button(QDialogButtonBox.StandardButton.Open).setEnabled(False)
+        layoutv.addWidget(self._button_box)
+
+    def _validator(self):
+        val = self._ip_address.text()
+        octets = val.split('.')
+        if len(octets) == 4:
+            for octet in octets:
+                try:
+                    octet_int = int(octet)
+                except ValueError:
+                    break
+                if not (0 <= octet_int <= 255):
+                    break
+            else: # Good address
+                self._button_box.button(
+                    QDialogButtonBox.StandardButton.Open).setEnabled(True)
+                return
+        self._button_box.button(
+            QDialogButtonBox.StandardButton.Open).setEnabled(False)
+
+    def get_ip_address(self):
+        """Return the entered IP address."""
+        return self._ip_address.text()
+
+class AsyncIPAddressDialog:
+    @staticmethod
+    async def get_ip_address(parent, title):
+        dialog = IPAddressDialog(parent, title)
+        result = await dialog_async_exec(dialog)
+        if not result:
+            return None
+        return dialog.get_ip_address()

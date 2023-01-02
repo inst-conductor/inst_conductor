@@ -1,12 +1,12 @@
 Next tasks:
-- Fix QInputDialog.getText
-- Fix IP input dialog
 - Convert everything to global style sheets
 - Put instrument prefixes on read/write/query debug messages
 - Put timestamps on measurements in dictionary
-- Clean up widget init code to have more standardized names
 - SDL make reset test log more obvious when there is something in the log
 - Fix closeEvent handler
+
+Cleanup:
+- Clean up widget init code to have more standardized names
 
 ** PyInstaller **
 
@@ -16,6 +16,7 @@ https://github.com/pyqtgraph/pyqtgraph/issues/1381
 
 ** General **
 
+- Debug/SCPI command logging to file selectable through menu
 - Alt+Mouse Wheel does not move the 0.001 digit like it should (known Qt bug)
 - Mouse wheel or up/down arrow should move digit at cursor position like a real instrument
 - Look into tab focus
@@ -90,6 +91,7 @@ between measurements
   font)
 - Option to allow live update while changing V/A
 - Option to require Enter to change V/A, not just losing focus
+- Show status message when timer is on if timer display is not shown
 - Channel 3 indicator and control if possible
 - Maybe figure out a way to enable/disable measurements
 
@@ -106,6 +108,7 @@ Siglent Technologies,SDM3055,SDM35FAQ1R1838,1.01.01.25
 - Add sub-units on display (e.g. mVDC or uVDC)
 - Change colors to the side of each set of parameters to they are accessible to
   color-blind people
+- Handle 3045X, 3055, and 3065X with different numbers of digits?
 
 ** SDS **
 

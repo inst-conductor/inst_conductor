@@ -1,11 +1,11 @@
 ################################################################################
-# device/__init__.py
+# conductor/device/__init__.py
 #
 # This file is part of the inst_conductor software suite.
 #
 # It contains the top-level interface to the instrument device driver module.
 #
-# Copyright 2022 Robert S. French (rfrench@rfrench.org)
+# Copyright 2023 Robert S. French (rfrench@rfrench.org)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by

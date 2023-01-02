@@ -1,11 +1,11 @@
 ################################################################################
-# plot_xy_window.py
+# conductor/plot_xy_window.py
 #
 # This file is part of the inst_conductor software suite.
 #
 # It contains the plot window that displays a graph of X vs Y values.
 #
-# Copyright 2022 Robert S. French (rfrench@rfrench.org)
+# Copyright 2023 Robert S. French (rfrench@rfrench.org)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -673,7 +673,7 @@ class PlotXYWindow(QWidget):
     def measurements_changed(self):
         """Called when the set of instruments/measurements changes."""
         if (self._plot_x_source not in ('Elapsed Time', 'Absolute Time') and
-                self._plot_x_source not in self._main_window._measurements):
+            self._plot_x_source not in self._main_window._measurements):
             # The X source disappeared
             self._plot_x_source = 'Elapsed Time'
         for source_num in range(self._max_plot_items):

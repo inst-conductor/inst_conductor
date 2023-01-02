@@ -1,12 +1,12 @@
 ################################################################################
-# device/inst_config.py
+# conductor/device/inst_config.py
 #
 # This file is part of the inst_conductor software suite.
 #
 # It contains the parent class for all instrument configurations (the
 # InstrumentConfiguration) class.
 #
-# Copyright 2022 Robert S. French (rfrench@rfrench.org)
+# Copyright 2023 Robert S. French (rfrench@rfrench.org)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by

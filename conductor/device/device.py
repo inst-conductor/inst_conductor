@@ -1,12 +1,12 @@
 ################################################################################
-# device/device.py
+# conductor/device/device.py
 #
 # This file is part of the inst_conductor software suite.
 #
 # It contains the parent class for all devices (the Device class) and the all
 # devices that support IEEE-488.2 (the Device4882 class).
 #
-# Copyright 2022 Robert S. French (rfrench@rfrench.org)
+# Copyright 2023 Robert S. French (rfrench@rfrench.org)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@
 
 
 import asyncio
+import logging
 
 
 class NotConnectedError(Exception):
@@ -47,6 +48,9 @@ class Device(object):
         self._io_lock = asyncio.Lock()
         self._connection_timeout = 3
         self._is_fake = False
+        self._logger = None
+        self._scpi_port = 5025
+        self._logger = logging.getLogger(f'ic.device')
 
     @property
     def connected(self):
@@ -91,6 +95,9 @@ class Device(object):
     def set_debug(self, val):
         self._debug = val
 
+    def set_logger(self, logger):
+        self._logger = logger
+
     @classmethod
     def idn_mapping(cls):
         """Map IDN information to an instrument class."""
@@ -112,24 +119,21 @@ class Device(object):
             self._reader = self._writer = None
             self._connected = True
             self._is_fake = True
-            if self._debug:
-                print(f'Connected to fake device {self._resource_name}')
+            self._logger.info(f'Connected to fake device {self._resource_name}')
             return
         elif self._resource_name.startswith('TCPIP::'):
             ip_addr = self._resource_name.replace('TCPIP::', '')
             try:
                 self._reader, self._writer = await asyncio.wait_for(
-                    asyncio.open_connection(ip_addr, 5025),
+                    asyncio.open_connection(ip_addr, self._scpi_port),
                     timeout=self._connection_timeout)
             except: # Too many possible exceptions to check for
-                if self._debug:
-                    print(f'Timeout connecting to {self._resource_name}')
+                self._logger.warning(f'Error connecting to {self._resource_name}')
                 raise NotConnectedError
             self._connected = True
-            if self._debug:
-                print(f'Connected to {self._resource_name}')
+            self._logger.info(f'Connected to {self._resource_name}')
         else:
-            print(f'Bad resource name {self._resource_name}')
+            self._logger.error(f'Bad resource name {self._resource_name}')
             return
 
     def init_names(self, long_pfx, short_pfx, existing_names):
@@ -149,6 +153,7 @@ class Device(object):
                     break
                 sfx += 1
         self._name = short_name
+        self._logger = logging.getLogger(f'ic.device.{short_pfx}')
 
     ### Direct access to pyvisa functions
 
@@ -160,8 +165,7 @@ class Device(object):
             self._writer.close()
             await self._writer.wait_closed()
         self._connected = False
-        if self._debug:
-            print(f'Disconnected from {self._resource_name}')
+        self._logger.info(f'{self._long_name} - Disconnected')
 
     async def query(self, s, timeout=None):
         """VISA query, write then read."""
@@ -181,8 +185,7 @@ class Device(object):
             #     if self._debug:
             #         print(f'query "{s}" resulted in disconnect')
             #     raise ContactLostError
-        if self._debug:
-            print(f'query "{s}" returned "{ret}"')
+        self._logger.debug(f'{self._long_name} - query "{s}" returned "{ret}"')
         return ret
 
     async def read_no_lock(self):
@@ -204,8 +207,7 @@ class Device(object):
         """VISA read, strips termination characters."""
         async with self._io_lock:
             ret = await self._read_no_lock()
-        if self._debug:
-            print(f'read returned "{ret}"')
+        self._logger.debug(f'{self._long_name} - read returned "{ret}"')
         return ret
 
     async def read_raw(self):
@@ -222,8 +224,7 @@ class Device(object):
             # except pyvisa.errors.VisaIOError:
             #     self.disconnect()
             #     raise ContactLostError
-        if self._debug:
-            print(f'read_raw returned "{ret}"')
+        self._logger.debug(f'{self._long_name} - read_raw returned "{ret}"')
         return ret
 
     async def write_no_lock(self, s):
@@ -236,15 +237,14 @@ class Device(object):
             self._writer.write((s+'\n').encode())
             await self._writer.drain()
         except ConnectionResetError:
-                await self.disconnect()
-                raise NotConnectedError
+            await self.disconnect()
+            raise NotConnectedError
 
     async def write(self, s):
         """VISA write, appending termination characters."""
         if not self._connected:
             raise NotConnectedError
-        if self._debug:
-            print(f'write "{s}"')
+        self._logger.debug(f'{self._long_name} - write "{s}"')
         if self._is_fake:
             return
         try:
@@ -259,8 +259,7 @@ class Device(object):
         """VISA write, no termination characters."""
         if not self._connected:
             raise NotConnectedError
-        if self._debug:
-            print(f'write_raw "{s}"')
+        self._logger.debug(f'{self._long_name} - write_raw "{s}"')
         if self._is_fake:
             return
         try:

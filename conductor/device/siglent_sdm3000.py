@@ -1,5 +1,5 @@
 ################################################################################
-# siglent_sdm3000.py
+# conductor/device/siglent_sdm3000.py
 #
 # This file is part of the inst_conductor software suite.
 #
@@ -9,7 +9,7 @@
 #   - SDM3055
 #   - SDM3065X
 #
-# Copyright 2022 Robert S. French (rfrench@rfrench.org)
+# Copyright 2023 Robert S. French (rfrench@rfrench.org)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -130,6 +130,9 @@ class InstrumentSiglentSDM3000(Device4882):
              self._model,
              self._serial_number,
              self._firmware_version) = idn
+            if self._model.strip() == '':
+                # Handle my broken SDM3055
+                self._model = 'SDM3055'
         if self._manufacturer != 'Siglent Technologies':
             assert ValueError
         if not self._model.startswith('SDM'):
@@ -941,7 +944,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
         supported = ', '.join(self._inst.supported_instruments())
         msg = f"""Siglent SDM3000-series instrument interface.
 
-Copyright 2022, Robert S. French.
+Copyright 2023, Robert S. French.
 
 Supported instruments: {supported}.
 

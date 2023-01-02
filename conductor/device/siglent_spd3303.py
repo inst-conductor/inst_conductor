@@ -1,5 +1,5 @@
 ################################################################################
-# siglent_spd3303.py
+# conductor/device/siglent_spd3303.py
 #
 # This file is part of the inst_conductor software suite.
 #
@@ -8,7 +8,7 @@
 #   - SPD3303X
 #   - SPD3303X-E
 #
-# Copyright 2022 Robert S. French (rfrench@rfrench.org)
+# Copyright 2023 Robert S. French (rfrench@rfrench.org)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -792,7 +792,7 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
         supported = ', '.join(self._inst.supported_instruments())
         msg = f"""Siglent SPD3303X-series instrument interface.
 
-Copyright 2022, Robert S. French.
+Copyright 2023, Robert S. French.
 
 Supported instruments: {supported}.
 

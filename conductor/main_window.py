@@ -1,11 +1,11 @@
 ################################################################################
-# main_window.py
+# conductor/main_window.py
 #
 # This file is part of the inst_conductor software suite.
 #
 # It contains the main window displayed when the program is first run.
 #
-# Copyright 2022 Robert S. French (rfrench@rfrench.org)
+# Copyright 2023 Robert S. French (rfrench@rfrench.org)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,8 +23,10 @@
 
 import asyncio
 from collections import namedtuple
+import configparser
 import csv
 import itertools
+import logging
 import math
 import platform
 import sys
@@ -34,8 +36,6 @@ import numpy as np
 
 from PyQt6.QtWidgets import (QButtonGroup,
                              QComboBox,
-                             QDialog,
-                             QDialogButtonBox,
                              QDoubleSpinBox,
                              QFrame,
                              QGridLayout,
@@ -43,18 +43,17 @@ from PyQt6.QtWidgets import (QButtonGroup,
                              QHBoxLayout,
                              QLabel,
                              QLayout,
-                             QLineEdit,
                              QMenuBar,
                              QPushButton,
                              QRadioButton,
                              QVBoxLayout,
-                             QWidget,
-                            )
+                             QWidget)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence
 
 from conductor.qasync import asyncSlot, asyncClose
 from conductor.qasync.qasync_helper import (asyncSlotSender,
+                                            AsyncIPAddressDialog,
                                             QAsyncFileDialog,
                                             QAsyncMessageBox)
 from conductor.stylesheet import QSS_THEME
@@ -64,64 +63,12 @@ from conductor.plot_histogram_window import PlotHistogramWindow
 from conductor.plot_xy_window import PlotXYWindow
 
 
-class IPAddressDialog(QDialog):
-    """Custom dialog that accepts and validates an IP address."""
-    def __init__(self, parent=None):
-        super().__init__(parent)
-
-        layoutv = QVBoxLayout()
-        self.setLayout(layoutv)
-        layouth = QHBoxLayout()
-        layoutv.addSpacing(50)
-        layoutv.addLayout(layouth)
-        layoutv.addSpacing(50)
-        layouth.addSpacing(50)
-        layouth.addWidget(QLabel('IP Address:'))
-        self._ip_address = QLineEdit()
-        self._ip_address.setStyleSheet('max-width: 7.6em; font-family: "Courier New";')
-        self._ip_address.setInputMask('000.000.000.000;_')
-        self._ip_address.textChanged.connect(self._validator)
-        layouth.addWidget(self._ip_address)
-        layouth.addSpacing(50)
-
-        buttons = (QDialogButtonBox.StandardButton.Open |
-                   QDialogButtonBox.StandardButton.Cancel)
-        self._button_box = QDialogButtonBox(buttons)
-        self._button_box.accepted.connect(self.accept)
-        self._button_box.rejected.connect(self.reject)
-        self._button_box.button(
-            QDialogButtonBox.StandardButton.Open).setEnabled(False)
-        layoutv.addWidget(self._button_box)
-
-    def _validator(self):
-        val = self._ip_address.text()
-        octets = val.split('.')
-        if len(octets) == 4:
-            for octet in octets:
-                try:
-                    octet_int = int(octet)
-                except ValueError:
-                    break
-                if not (0 <= octet_int <= 255):
-                    break
-            else: # Good address
-                self._button_box.button(
-                    QDialogButtonBox.StandardButton.Open).setEnabled(True)
-                return
-        self._button_box.button(
-            QDialogButtonBox.StandardButton.Open).setEnabled(False)
-
-    def get_ip_address(self):
-        """Return the entered IP address."""
-        return self._ip_address.text()
-
-
 class MainWindow(QWidget):
     """The main window of the entire application."""
 
     ResourceAttributes = namedtuple('ResourceAttributes',
                                     ('name', 'inst', 'config_widget'))
-    def __init__(self, app):
+    def __init__(self, app, config_file):
         super().__init__()
         self.setWindowTitle('Instrument Conductor')
 
@@ -134,6 +81,8 @@ class MainWindow(QWidget):
                 self._style_env = 'windows'
 
         self.app = app
+
+        self._logger = logging.getLogger('ic')
 
         # Tuple of ResourceAttributes and associated lock
         self._resources_lock = asyncio.Lock()
@@ -150,7 +99,7 @@ class MainWindow(QWidget):
         self._triggers = {}
         self._trigger_names = {}
 
-        self._max_recent_resources = 4
+        self._max_recent_resources = 9
         self._recent_resources = [] # List of resource names
 
         self._measurement_display_widgets = []
@@ -166,6 +115,38 @@ class MainWindow(QWidget):
         self._widget_registry = {}
 
         self._init_widgets()
+
+        self._config_file = config_file
+        self._read_config()
+
+    def _read_config(self):
+        """Read the config file and override defaults."""
+        self._logger.info(f'Reading config file {self._config_file}')
+        config = configparser.ConfigParser()
+        config.read(self._config_file)
+        self._recent_resources = []
+        if 'Recent Resources' in config:
+            for i in range(self._max_recent_resources):
+                key = f'recent{i+1}'
+                if key in config['Recent Resources']:
+                    self._recent_resources.append(config['Recent Resources'][key])
+        self._refresh_menubar_device_recent_resources()
+
+    def _write_config(self):
+        """Write the config file."""
+        config = configparser.ConfigParser()
+
+        recent = {}
+        for i in range(len(self._recent_resources)):
+            key = f'recent{i+1}'
+            if not self._recent_resources[i]:
+                break
+            recent[key] = self._recent_resources[i]
+        config['Recent Resources'] = recent
+
+        self._logger.debug(f'Writing config file {self._config_file}')
+        with open(self._config_file, 'w') as configfile:
+            config.write(configfile)
 
     def _init_widgets(self):
         """Initialize the top-level widgets."""
@@ -239,8 +220,8 @@ class MainWindow(QWidget):
         input = QDoubleSpinBox()
         layouth2.addWidget(input)
         input.setAlignment(Qt.AlignmentFlag.AlignRight)
-        input.setDecimals(1)
-        input.setRange(0.5, 86400)
+        input.setDecimals(2)
+        input.setRange(0.01, 86400)
         input.setSuffix(' s')
         input.setValue(1)
         input.setSingleStep(0.5)
@@ -495,29 +476,29 @@ class MainWindow(QWidget):
                 await self._update_widgets()
 
     @asyncSlotSender()
-    async def _on_select_meas_state_source(self, combo, sel):
+    async def _on_select_meas_state_source(self, combo):
         """Handle Instrument State source selection."""
         async with self._measurement_lock:
             async with self._resources_lock:
-                self._measurement_state_source = combo.itemData(sel)
+                self._measurement_state_source = combo.itemData(combo.currentIndex())
                 await self._check_acquisition_ready()
                 await self._update_widgets()
 
     @asyncSlotSender()
-    async def _on_select_meas_value_source(self, combo, sel):
+    async def _on_select_meas_value_source(self, combo):
         """Handle Measurement Value source selection."""
         async with self._measurement_lock:
             async with self._resources_lock:
-                self._measurement_value_source = combo.itemData(sel)
+                self._measurement_value_source = combo.itemData(combo.currentIndex())
                 await self._check_acquisition_ready()
                 await self._update_widgets()
 
-    @asyncSlot()
-    async def _on_select_meas_value_op(self, combo, sel):
+    @asyncSlotSender()
+    async def _on_select_meas_value_op(self, combo):
         """Handle Measurement Value operator selection."""
         async with self._measurement_lock:
             async with self._resources_lock:
-                self._measurement_value_op = combo.itemData(sel)
+                self._measurement_value_op = combo.itemData(combo.currentIndex())
                 await self._check_acquisition_ready()
                 await self._update_widgets()
 
@@ -554,7 +535,7 @@ class MainWindow(QWidget):
                 resource_name = self._recent_resources[num]
                 action.setText(f'&{num+1} {resource_name}')
                 action.setVisible(True)
-                if resource_name in [x.name for x in self._open_resources]:
+                if resource_name.split(' ')[0] in [x.name for x in self._open_resources]:
                     action.setEnabled(False)
                 else:
                     action.setEnabled(True)
@@ -584,17 +565,16 @@ Supported instruments:
 Currently open resources:
 {open}
 
-Copyright 2022, Robert S. French"""
+Copyright 2023, Robert S. French"""
         QAsyncMessageBox.about(self, 'About', msg)
 
     @asyncSlot()
     async def _menu_do_open_ip(self):
         """Open a device based on an entered IP address."""
-        dialog = IPAddressDialog(self)
-        dialog.setWindowTitle('Connect to Instrument Using IP Address')
-        if not dialog.exec():
+        ip_address = await AsyncIPAddressDialog.get_ip_address(
+            self, 'Connect to Instrument Using IP Address')
+        if not ip_address:
             return
-        ip_address = dialog.get_ip_address()
         await self._open_ip(ip_address)
 
     @asyncSlotSender()
@@ -602,7 +582,8 @@ Copyright 2022, Robert S. French"""
         """Open a resource from the Recent Resource list."""
         # We don't bother to lock on the resource list here because there's
         # only a single access to it and nothing can interrupt in the middle.
-        await self._open_resource(self._recent_resources[action.resource_number])
+        await self._open_resource(
+            self._recent_resources[action.resource_number].split(' ')[0])
 
     @asyncSlot()
     async def _open_ip(self, ip_address):
@@ -642,16 +623,18 @@ Copyright 2022, Robert S. French"""
                 self._open_resources.append(self.ResourceAttributes(
                     name=resource_name, inst=inst, config_widget=config_widget))
                 # Update the recent resource list and put this resource on top
+                recent_name = f'{resource_name} ({inst.model})'
                 try:
-                    idx = self._recent_resources.index(resource_name)
+                    idx = self._recent_resources.index(recent_name)
                 except ValueError:
                     pass
                 else:
                     del self._recent_resources[idx]
-                self._recent_resources.insert(0, resource_name)
+                self._recent_resources.insert(0, recent_name)
                 self._recent_resources = self._recent_resources[
                     :self._max_recent_resources]
                 self._refresh_menubar_device_recent_resources()
+                self._write_config()
 
                 # Update the measurement list with newly available measurements
                 num_existing = len(self._measurement_times)
@@ -705,21 +688,26 @@ Copyright 2022, Robert S. French"""
         h, m = divmod(m, 60)
         return '%02d:%02d:%02d' % (h, m, s)
 
-    def _heartbeat_update(self):
-        """Regular updates like the elapsed time."""
-        if len(self._measurement_times) == 0:
-            msg1 = 'Started: N/A'
-            msg2 = 'Elapsed: N/A'
-        else:
-            msg1 = ('Started: ' +
-                    time.strftime('%Y %b %d %H:%M:%S',
-                                  time.localtime(self._measurement_times[0])))
-            msg2 = 'Elapsed: ' + self._time_to_hms(self._measurement_times[-1] -
-                                                   self._measurement_times[0])
-        self._widget_measurement_started.setText(msg1)
-        self._widget_measurement_elapsed.setText(msg2)
-        npts = len(self._measurement_times)
-        self._widget_measurement_points.setText(f'# Data Points: {npts}')
+    @asyncSlot()
+    async def _heartbeat_update(self):
+        """Regular updates like the elapsed time and measurement display windows."""
+        async with self._measurement_lock:
+            if len(self._measurement_times) == 0:
+                msg1 = 'Started: N/A'
+                msg2 = 'Elapsed: N/A'
+            else:
+                msg1 = ('Started: ' +
+                        time.strftime('%Y %b %d %H:%M:%S',
+                                    time.localtime(self._measurement_times[0])))
+                msg2 = 'Recorded span: ' + self._time_to_hms(self._measurement_times[-1] -
+                                                             self._measurement_times[0])
+            self._widget_measurement_started.setText(msg1)
+            self._widget_measurement_elapsed.setText(msg2)
+            npts = len(self._measurement_times)
+            self._widget_measurement_points.setText(f'# Data Points: {npts}')
+
+            for measurement_display_widget in self._measurement_display_widgets:
+                measurement_display_widget.update()
 
     async def _check_acquisition_ready(self):
         """Check to see if the current acquisition trigger is met.
@@ -859,8 +847,6 @@ Copyright 2022, Robert S. French"""
                         if key not in trig_updated_keys:
                             self._triggers[key].append(math.nan)
                 self._measurement_last_good = not force_nan
-                for measurement_display_widget in self._measurement_display_widgets:
-                    measurement_display_widget.update()
 
     async def _update_widgets(self):
         """Update our widgets with current information.

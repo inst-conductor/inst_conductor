@@ -1,5 +1,5 @@
 ################################################################################
-# siglent_sdl1000.py
+# conductor/device/siglent_sdl1000.py
 #
 # This file is part of the inst_conductor software suite.
 #
@@ -10,7 +10,7 @@
 #   - SDL1030X
 #   - SDL1030X-E
 #
-# Copyright 2022 Robert S. French (rfrench@rfrench.org)
+# Copyright 2023 Robert S. French (rfrench@rfrench.org)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -1808,7 +1808,7 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         supported = ', '.join(self._inst.supported_instruments())
         msg = f"""Siglent SDL1000-series instrument interface.
 
-Copyright 2022, Robert S. French.
+Copyright 2023, Robert S. French.
 
 Supported instruments: {supported}.
 

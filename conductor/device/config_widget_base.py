@@ -1,12 +1,12 @@
 ################################################################################
-# device/config_widget_base.py
+# conductor/device/config_widget_base.py
 #
 # This file is part of the inst_conductor software suite.
 #
 # It contains the parent class for all instrument configuration widgets to
 # provide utility functions and a consistent look and feel.
 #
-# Copyright 2022 Robert S. French (rfrench@rfrench.org)
+# Copyright 2023 Robert S. French (rfrench@rfrench.org)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -348,7 +348,7 @@ class ListTableModel(QAbstractTableModel):
 class LongClickButton(QPushButton):
     """Button that implements both normal click and long-hold click."""
     def __init__(self, text, click_handler, long_click_handler,
-                 delay=2000):
+                 delay=1000):
         super().__init__(text)
         self._click_handler = click_handler
         self._long_click_handler = long_click_handler

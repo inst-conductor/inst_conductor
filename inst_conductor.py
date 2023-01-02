@@ -21,13 +21,18 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ################################################################################
 
+import __main__
+import argparse
 import asyncio
 import functools
+import logging
+import os
 import sys
 
 import conductor.qasync
 from conductor.qasync import QApplication
 
+import conductor.log as log
 from conductor.main_window import MainWindow
 
 app = QApplication.instance()
@@ -45,7 +50,7 @@ async def main():
         getattr(app, "aboutToQuit").connect(
             functools.partial(close_future, future, loop))
 
-    main_window = MainWindow(app)
+    main_window = MainWindow(app, arguments.config_file)
     main_window.show()
 
     if len(sys.argv) == 1:
@@ -61,6 +66,23 @@ async def main():
 
 
 if __name__ == "__main__":
+    prog_dir = os.path.dirname(__main__.__file__)
+    default_logfile = os.path.join(prog_dir, 'inst_conductor.log')
+    default_config_file = os.path.join(prog_dir, 'inst_conductor.ini')
+
+    parser = argparse.ArgumentParser(prog='inst_conductor')
+    parser.add_argument('args', nargs=argparse.REMAINDER)
+    log.add_arguments(parser, default_logfile, default_config_file)
+
+    arguments = parser.parse_args(sys.argv[1:])
+    sys.argv = sys.argv[:1] + arguments.args
+    log.setup_logging(arguments.console_log_level,
+                      arguments.logfile_log_level,
+                      arguments.logfile)
+    log.set_console_format(False)
+    logger = logging.getLogger('ic')
+    logger.info('Starting')
+
     try:
         conductor.qasync.run(main())
     except asyncio.exceptions.CancelledError:
