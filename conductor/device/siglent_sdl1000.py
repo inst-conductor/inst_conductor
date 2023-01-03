@@ -138,6 +138,12 @@ class InstrumentSiglentSDL1000(Device4882):
     @classmethod
     def idn_mapping(cls):
         """Map IDN information to an instrument class."""
+        # The only difference between the 1020 and 1030 is the supported power:
+        #   1020 => 200W
+        #   1030 => 300W
+        # The only difference between the X and X-E is the measurement resolution:
+        #   X   => 0.1 mV / 0.1 mA
+        #   X-E => 1   mV / 1   mA
         return {
             ('Siglent Technologies', 'SDL1020X'):   InstrumentSiglentSDL1000,
             ('Siglent Technologies', 'SDL1020X-E'): InstrumentSiglentSDL1000,

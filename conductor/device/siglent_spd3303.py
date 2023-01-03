@@ -73,6 +73,9 @@ class InstrumentSiglentSPD3303(Device4882):
     @classmethod
     def idn_mapping(cls):
         """Map IDN information to an instrument class."""
+        # The only difference between the X and X-E is the measurement resolution:
+        #   X   =>  1 mV /  1 mA
+        #   X-E => 10 mV / 10 mA
         return {
             ('Siglent Technologies', 'SPD3303X'):   InstrumentSiglentSPD3303,
             ('Siglent Technologies', 'SPD3303X-E'): InstrumentSiglentSPD3303,
@@ -999,10 +1002,10 @@ Alt+N      All channels ON
     def _menu_do_view_presets(self, state):
         """Toggle visibility of the preset buttons."""
         self._widget_registry['PresetsAction'].setChecked(state)
-        if state:
-            # When presets are shown, we turn off timer
-            self._menu_do_view_timer(False)
-            self._widget_registry['TimerAction'].setChecked(False)
+        # if state:
+        #     # When presets are shown, we turn off timer
+        #     self._menu_do_view_timer(False)
+        #     self._widget_registry['TimerAction'].setChecked(False)
         for ch in range(2):
             for w in self._widgets_preset_buttons[ch]:
                 if state:
@@ -1013,10 +1016,10 @@ Alt+N      All channels ON
     def _menu_do_view_timer(self, state):
         """Toggle visibility of the timer settings."""
         self._widget_registry['TimerAction'].setChecked(state)
-        if state:
-            # When timer is shown, we turn off presets
-            self._menu_do_view_presets(False)
-            self._widget_registry['PresetsAction'].setChecked(False)
+        # if state:
+        #     # When timer is shown, we turn off presets
+        #     self._menu_do_view_presets(False)
+        #     self._widget_registry['PresetsAction'].setChecked(False)
         for ch in range(2):
             for w in self._widgets_timer[ch]:
                 if state:

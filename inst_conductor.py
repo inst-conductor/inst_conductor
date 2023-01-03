@@ -53,9 +53,7 @@ async def main():
     main_window = MainWindow(app, arguments.config_file)
     main_window.show()
 
-    if len(sys.argv) == 1:
-        await main_window._menu_do_open_ip()
-    else:
+    if len(sys.argv) > 1:
         for resource in sys.argv[1:]:
             if resource.find('::') == -1:
                 resource = 'TCPIP::' + resource

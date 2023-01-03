@@ -59,6 +59,12 @@
 #   XXX
 ################################################################################
 
+################################################################################
+# *IDN? returns:
+#
+# Siglent Technologies,SDM3055,SDM35FAQ1R1838,1.01.01.25
+################################################################################
+
 
 import asyncio
 import json
@@ -94,6 +100,10 @@ class InstrumentSiglentSDM3000(Device4882):
     @classmethod
     def idn_mapping(cls):
         """Map IDN information to an instrument class."""
+        # The only relevant difference between these models is the number of digits:
+        #   SDM3045X => 4 1/2
+        #   SDM3055  => 5 1/2
+        #   SDM3065X => 6 1/2
         return {
             ('Siglent Technologies', 'SDM3045X'): InstrumentSiglentSDM3000,
             ('Siglent Technologies', 'SDM3055'):  InstrumentSiglentSDM3000,

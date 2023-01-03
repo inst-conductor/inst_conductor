@@ -104,7 +104,7 @@ class MainWindow(QWidget):
 
         self._measurement_display_widgets = []
 
-        self._acquisition_mode = 'Manual'
+        self._acquisition_mode = 'Always'
         self._acquisition_ready = True
         self._user_paused = False
         self._measurement_state_source = None
@@ -256,6 +256,7 @@ class MainWindow(QWidget):
         layouth = QHBoxLayout()
         layoutg.addLayout(layouth, 1, 1)
         combo = QComboBox()
+        combo.setEnabled(False)
         layouth.addWidget(combo)
         combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         combo.activated.connect(self._on_select_meas_state_source)
@@ -273,6 +274,7 @@ class MainWindow(QWidget):
         layoutg.addLayout(layouth, 2, 1)
         combo = QComboBox()
         layouth.addWidget(combo)
+        combo.setEnabled(False)
         combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         combo.activated.connect(self._on_select_meas_value_source)
         self._widget_registry['MeasurementValueSourceCombo'] = combo
@@ -281,6 +283,7 @@ class MainWindow(QWidget):
         layouth = QHBoxLayout()
         layoutg.addLayout(layouth, 3, 1)
         combo = QComboBox()
+        combo.setEnabled(False)
         combo.addItem('Less than', userData='<')
         combo.addItem('Less than or equal to', userData='<=')
         combo.addItem('Greater than', userData='>')
@@ -296,6 +299,7 @@ class MainWindow(QWidget):
         layouth = QHBoxLayout()
         layoutg.addLayout(layouth, 4, 1)
         input = QDoubleSpinBox()
+        input.setEnabled(False)
         input.setAlignment(Qt.AlignmentFlag.AlignRight)
         layouth.addWidget(input)
         input.setRange(-1000000, 1000000)
@@ -401,11 +405,10 @@ class MainWindow(QWidget):
             self._measurement_times = []
             for key in self._measurements:
                 self._measurements[key] = []
-            self._measurement_last_good = True
+            self._measurement_last_good = False
             for key in self._triggers:
                 self._triggers[key] = []
-            for measurement_display_widget in self._measurement_display_widgets:
-                measurement_display_widget.update()
+            self._update_measurement_info_and_widgets()
 
     @asyncSlot()
     async def _on_click_save_csv(self):
@@ -692,41 +695,51 @@ Copyright 2023, Robert S. French"""
     async def _heartbeat_update(self):
         """Regular updates like the elapsed time and measurement display windows."""
         async with self._measurement_lock:
-            if len(self._measurement_times) == 0:
-                msg1 = 'Started: N/A'
-                msg2 = 'Elapsed: N/A'
-            else:
-                msg1 = ('Started: ' +
-                        time.strftime('%Y %b %d %H:%M:%S',
-                                    time.localtime(self._measurement_times[0])))
-                msg2 = 'Recorded span: ' + self._time_to_hms(self._measurement_times[-1] -
-                                                             self._measurement_times[0])
-            self._widget_measurement_started.setText(msg1)
-            self._widget_measurement_elapsed.setText(msg2)
-            npts = len(self._measurement_times)
-            self._widget_measurement_points.setText(f'# Data Points: {npts}')
+            self._update_measurement_info_and_widgets()
 
-            for measurement_display_widget in self._measurement_display_widgets:
-                measurement_display_widget.update()
+    def _update_measurement_info_and_widgets(self):
+        """Update the Acquisition info and all display widgets."""
+        if len(self._measurement_times) == 0:
+            msg1 = 'Started: N/A'
+            msg2 = 'Recorded span: N/A'
+        else:
+            msg1 = ('Started: ' +
+                    time.strftime('%Y %b %d %H:%M:%S',
+                                time.localtime(self._measurement_times[0])))
+            msg2 = 'Recorded span: ' + self._time_to_hms(self._measurement_times[-1] -
+                                                            self._measurement_times[0])
+        self._widget_measurement_started.setText(msg1)
+        self._widget_measurement_elapsed.setText(msg2)
+        npts = len(self._measurement_times)
+        self._widget_measurement_points.setText(f'# Data Points: {npts}')
+
+        for measurement_display_widget in self._measurement_display_widgets:
+            measurement_display_widget.update()
 
     async def _check_acquisition_ready(self):
         """Check to see if the current acquisition trigger is met.
 
         Should be called within both _resources_locak and _measurement_lock."""
         match self._acquisition_mode:
-            case 'Manual':
+            case 'Always':
                 self._acquisition_ready = True
                 return
             case 'State':
+                found_trigger = False
                 for ra in self._open_resources:
                     if ra.config_widget is not None:
                         triggers = ra.config_widget.get_triggers()
                         for trigger_key, trigger in triggers.items():
+                            found_trigger = True
                             key = (ra.inst.long_name, trigger_key)
                             if key == self._measurement_state_source:
                                 self._acquisition_ready = trigger['val']
                                 return
-                assert False, 'State source no longer in open resources'
+                if found_trigger:
+                    assert False, 'State source no longer in open resources'
+                else:
+                    self._acquisition_ready = False # No triggers
+                    return
             case 'Value':
                 self._acquisition_ready = False
                 src = self._measurement_value_source
@@ -768,13 +781,13 @@ Copyright 2023, Robert S. French"""
         # Although technically each measurement takes place at a different time,
         # it's important that we treat each measurement group as being at a single
         # time so we can match up measurements in X/Y plots and file saving.
-        if len(self._open_resources) == 0:
-            return
         async with self._measurement_lock:
             async with self._resources_lock:
                 # Check for the current trigger condition
                 await self._check_acquisition_ready()
                 self._update_acquisition_indicator()
+                if len(self._open_resources) == 0:
+                    return
                 force_nan = False
                 if not self._acquisition_ready or self._user_paused:
                     if self._measurement_last_good:
@@ -922,21 +935,21 @@ Copyright 2023, Robert S. French"""
     def _update_acquisition_indicator(self):
         """Update the acquisition indicator."""
         label = self._widget_registry['AcquisitionIndicator']
-        if self._acquisition_mode == 'Manual':
+        if self._user_paused:
+            color = '#000000'
+            label.setText('Paused')
+        elif self._acquisition_mode == 'Always' or self._acquisition_ready:
             color = '#b00000'
             label.setText('Acquiring')
         else:
-            if self._acquisition_ready:
-                color = '#b00000'
-                label.setText('Acquiring')
-            else:
-                color = '#00b000'
-                label.setText('Waiting')
+            color = '#00b000'
+            label.setText('Waiting')
+        # border: 2px solid black;
+        # background-color: #c0c0c0;
         ss = f"""min-width: 4em; max-width: 4em; min-height: 1.5em; max-height: 1.5em;
-                 border: 2px solid black;
                  text-align: center;
                  font-weight: bold; font-size: 18px;
-                 background-color: #c0c0c0; color: {color};"""
+                 color: {color};"""
         label.setStyleSheet(ss)
 
     @property
