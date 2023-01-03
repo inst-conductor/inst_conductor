@@ -27,13 +27,22 @@ import asyncio
 import logging
 
 
-class NotConnectedError(Exception):
+class ConnectionLost(Exception):
+    pass
+
+
+class NotConnected(Exception):
+    pass
+
+
+class InstrumentClosed(Exception):
     pass
 
 
 class Device(object):
     """Class representing any generic device accessible through VISA."""
     def __init__(self, resource_name):
+        self._ready_to_close = False
         self._resource_name = resource_name
         self._long_name = resource_name
         self._name = resource_name
@@ -129,7 +138,7 @@ class Device(object):
                     timeout=self._connection_timeout)
             except: # Too many possible exceptions to check for
                 self._logger.warning(f'Error connecting to {self._resource_name}')
-                raise NotConnectedError
+                raise NotConnected
             self._connected = True
             self._logger.info(f'Connected to {self._resource_name}')
         else:
@@ -160,17 +169,20 @@ class Device(object):
     async def disconnect(self):
         """Close the connection to the device."""
         if not self._connected:
-            raise NotConnectedError
+            raise NotConnected
         if not self._is_fake:
-            self._writer.close()
-            await self._writer.wait_closed()
+            try:
+                self._writer.close()
+                await self._writer.wait_closed()
+            except ConnectionResetError: # OK if already closed
+                pass
         self._connected = False
         self._logger.info(f'{self._long_name} - Disconnected')
 
     async def query(self, s, timeout=None):
         """VISA query, write then read."""
         if not self._connected:
-            raise NotConnectedError
+            raise NotConnected
         if self._is_fake:
             ret = 'QUERY_RESULT'
         else:
@@ -191,16 +203,24 @@ class Device(object):
     async def read_no_lock(self):
         """VISA read, strips termination characters. No locking."""
         if not self._connected:
-            raise NotConnectedError
+            self._logger.debug(f'{self._long_name} - read while not connected')
+            raise NotConnected
+        if self._ready_to_close:
+            self._logger.debug(f'{self._long_name} - read while ready to close')
+            raise InstrumentClosed
         if self._is_fake:
             ret = 'READ_RESULT'
         else:
-            # try:
-            ret = await self._reader.readline()
+            try:
+                ret = await self._reader.readline()
+            except ConnectionResetError:
+                self._logger.debug(f'{self._long_name} - read connection lost')
+                await self.disconnect()
+                raise ConnectionLost
             ret = ret.decode().strip(' \t\r\n')
-            # except pyvisa.errors.VisaIOError:
-            #     self.disconnect()
-            #     raise ContactLostError
+            if self._ready_to_close:
+                self._logger.debug(f'{self._long_name} - read while ready to close')
+                raise InstrumentClosed
         return ret
 
     async def read(self):
@@ -213,52 +233,70 @@ class Device(object):
     async def read_raw(self):
         """VISA read_raw."""
         if not self._connected:
-            raise NotConnectedError
+            self._logger.debug(f'{self._long_name} - read_raw while not connected')
+            raise NotConnected
+        if self._ready_to_close:
+            self._logger.debug(f'{self._long_name} - read_raw while ready to close')
+            raise InstrumentClosed
         if self._is_fake:
             ret = 'READ_RAW_RESULT'
         else:
-            # try:
             async with self._io_lock:
-                ret = await self._reader.readline()
+                try:
+                    ret = await self._reader.readline()
+                except ConnectionResetError:
+                    self._logger.debug(f'{self._long_name} - read_raw connection lost')
+                    await self.disconnect()
+                    raise ConnectionLost
+            if self._ready_to_close:
+                self._logger.debug(f'{self._long_name} - read_raw while ready to close')
+                raise InstrumentClosed
             ret = ret.decode()
-            # except pyvisa.errors.VisaIOError:
-            #     self.disconnect()
-            #     raise ContactLostError
         self._logger.debug(f'{self._long_name} - read_raw returned "{ret}"')
         return ret
 
     async def write_no_lock(self, s):
         """VISA write, appending termination characters. No locking."""
         if not self._connected:
-            raise NotConnectedError
+            self._logger.debug(f'{self._long_name} - write while not connected')
+            raise NotConnected
+        if self._ready_to_close:
+            self._logger.debug(f'{self._long_name} - write while ready to close')
+            raise InstrumentClosed
         if self._is_fake:
             return
         try:
             self._writer.write((s+'\n').encode())
             await self._writer.drain()
         except ConnectionResetError:
+            self._logger.debug(f'{self._long_name} - write connection lost')
             await self.disconnect()
-            raise NotConnectedError
+            raise ConnectionLost
+        if self._ready_to_close:
+            self._logger.debug(f'{self._long_name} - write while ready to close')
+            raise InstrumentClosed
 
     async def write(self, s):
         """VISA write, appending termination characters."""
-        if not self._connected:
-            raise NotConnectedError
         self._logger.debug(f'{self._long_name} - write "{s}"')
         if self._is_fake:
             return
         try:
             async with self._io_lock:
-                self._writer.write((s+'\n').encode())
-                await self._writer.drain()
+                await self.write_no_lock(s)
         except ConnectionResetError:
+            self._logger.debug(f'{self._long_name} - write connection lost')
             await self.disconnect()
-            raise NotConnectedError
+            raise ConnectionLost
 
     async def write_raw(self, s):
         """VISA write, no termination characters."""
         if not self._connected:
-            raise NotConnectedError
+            self._logger.debug(f'{self._long_name} - write_raw while not connected')
+            raise NotConnected
+        if self._ready_to_close:
+            self._logger.debug(f'{self._long_name} - write_raw while ready to close')
+            raise InstrumentClosed
         self._logger.debug(f'{self._long_name} - write_raw "{s}"')
         if self._is_fake:
             return
@@ -266,8 +304,12 @@ class Device(object):
             self._writer.write(s.encode())
             await self._writer.drain()
         except ConnectionResetError:
+            self._logger.debug(f'{self._long_name} - write_raw connection lost')
             await self.disconnect()
-            raise NotConnectedError
+            raise ConnectionLost
+        if self._ready_to_close:
+            self._logger.debug(f'{self._long_name} - write_raw while ready to close')
+            raise InstrumentClosed
 
     ### Internal support routines
 

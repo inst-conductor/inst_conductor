@@ -606,7 +606,7 @@ Copyright 2023, Robert S. French"""
         try:
             inst = await device.create_device(resource_name,
                                               existing_names=self.device_names)
-        except device.NotConnectedError:
+        except device.NotConnected:
             QAsyncMessageBox.critical(self, 'Error',
                                       f'Failed to open "{resource_name}"')
             return
@@ -621,6 +621,8 @@ Copyright 2023, Robert S. French"""
         config_widget = inst.configure_widget(self)
         config_widget.show()
         await config_widget.refresh()
+        if not config_widget.connected:
+            return
         async with self._measurement_lock:
             async with self._resources_lock:
                 self._open_resources.append(self.ResourceAttributes(
@@ -997,7 +999,13 @@ Copyright 2023, Robert S. French"""
         """Update internal state when one of the configuration widgets is closed."""
         async with self._resources_lock:
             async with self._measurement_lock:
-                idx = [x.name for x in self._open_resources].index(inst.resource_name)
+                try:
+                    idx = [x.name for x in self._open_resources].index(inst.resource_name)
+                except ValueError:
+                    # This can happen if the window is closed while the instrument is
+                    # still being initialized. Since the resource isn't in our list
+                    # yet, we can just ignore everything.
+                    return
                 del self._open_resources[idx]
                 self._refresh_menubar_device_recent_resources()
         # for key in list(self._measurements): # Need list because we're modifying keys

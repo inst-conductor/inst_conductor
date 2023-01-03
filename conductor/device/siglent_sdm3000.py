@@ -91,7 +91,9 @@ from conductor.qasync.qasync_helper import (asyncSlotSender,
 
 from conductor.device.config_widget_base import (ConfigureWidgetBase,
                                                  MultiSpeedSpinBox)
-from conductor.device import Device4882, NotConnectedError
+from conductor.device import (Device4882,
+                              InstrumentClosed,
+                              NotConnected)
 
 
 class InstrumentSiglentSDM3000(Device4882):
@@ -155,6 +157,7 @@ class InstrumentSiglentSDM3000(Device4882):
         """Disconnect from the instrument and turn off its remote state."""
         # There is no way to put the SDM back in local mode except by pressing the
         # LOCAL button on the front panel
+        self._ready_to_close = False
         await super().disconnect(*args, **kwargs)
 
     def configure_widget(self, main_window):
@@ -400,88 +403,94 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
     async def refresh(self):
         """Read all parameters from the instrument and set our internal state to match."""
         async with self._config_lock:
-            # Start with a blank slate
-            self._param_state = [{} for i in range(self._NUM_PARAMSET+1)]
-            for mode, info in _SDM_MODE_PARAMS.items():
-                # Loaded paramset entries go in index 1
-                idx = 0 if mode == 'Global' else 1
-                for param_spec in info['params']:
-                    param0 = self._scpi_cmds_from_param_info(info, param_spec)
-                    if param0 in self._param_state[idx]:
-                        # Modes often ask for the same data, no need to retrieve it twice
-                        continue
-                    if self._inst._is_fake:
-                        if param0 == ':TRIGGER:SOURCE':
-                            val = 'MANUAL' # XXX
-                        elif param0 == ':FUNCTION':
-                            val = random.choice((
-                                'VOLT:DC', 'VOLT:AC', 'CURR:DC', 'CURR:AC',
-                                'RES', 'FRES',
-                                # 'CAP', 'CONT',
-                                # 'DIOD', 'FREQ', 'PER', 'TEMP' XXX
-                            ))
-                        elif param0.endswith(':IMP'):
-                            val = random.choice(('10M', '10G'))
-                    else:
-                        val = await self._inst.query(f'{param0}?', timeout=10000)
-                    param_type = param_spec[1]
-                    if param_type[0] == '.': # Handle .3f
-                        param_type = param_type[-1]
-                    match param_type:
-                        case 'f': # Float
-                            if self._inst._is_fake:
-                                val = random.random()
-                            else:
-                                val = float(val)
-                        case 'b' | 'd': # Boolean or Decimal
-                            if self._inst._is_fake:
-                                val = random.randint(0, 1)
-                            else:
-                                val = int(float(val))
-                        case 's' | 'r': # String or radio button
-                            # The SDM3000 wraps function strings in double qoutes for
-                            # some reason
-                            val = val.strip('"').upper()
-                        case 'rv': # Voltage range
-                            if self._inst._is_fake:
-                                val = random.choice(
-                                    list(self._RANGE_V_SCPI_READ_TO_WRITE.keys()))
-                            val = self._range_v_scpi_read_to_scpi_write(val)
-                        case 'ri': # Current range
-                            if self._inst._is_fake:
-                                val = random.choice(
-                                    list(self._RANGE_I_SCPI_READ_TO_WRITE.keys()))
-                            val = self._range_i_scpi_read_to_scpi_write(val)
-                        case 'rr': # Resistance range
-                            if self._inst._is_fake:
-                                val = random.choice(
-                                    list(self._RANGE_R_SCPI_READ_TO_WRITE.keys()))
-                            val = self._range_r_scpi_read_to_scpi_write(val)
-                        case 'rc': # Capacitance range
-                            if self._inst._is_fake:
-                                val = random.choice(
-                                    list(self._RANGE_C_SCPI_READ_TO_WRITE.keys()))
-                            val = self._range_c_scpi_read_to_scpi_write(val)
-                        case 'rs': # Speed
-                            if self._inst._is_fake:
-                                val = random.choice((0.3, 1., 10.))
-                            else:
-                                val = self._speed_scpi_read_to_scpi_write(val)
-                        case _:
-                            assert False, f'Unknown param_type {param_type}'
-                    self._param_state[idx][param0] = val
+            try:
+                # Start with a blank slate
+                self._param_state = [{} for i in range(self._NUM_PARAMSET+1)]
+                for mode, info in _SDM_MODE_PARAMS.items():
+                    # Loaded paramset entries go in index 1
+                    idx = 0 if mode == 'Global' else 1
+                    for param_spec in info['params']:
+                        param0 = self._scpi_cmds_from_param_info(info, param_spec)
+                        if param0 in self._param_state[idx]:
+                            # Modes often ask for the same data, no need to retrieve it twice
+                            continue
+                        if self._inst._is_fake:
+                            if param0 == ':TRIGGER:SOURCE':
+                                val = 'MANUAL' # XXX
+                            elif param0 == ':FUNCTION':
+                                val = random.choice((
+                                    'VOLT:DC', 'VOLT:AC', 'CURR:DC', 'CURR:AC',
+                                    'RES', 'FRES',
+                                    # 'CAP', 'CONT',
+                                    # 'DIOD', 'FREQ', 'PER', 'TEMP' XXX
+                                ))
+                            elif param0.endswith(':IMP'):
+                                val = random.choice(('10M', '10G'))
+                        else:
+                            val = await self._inst.query(f'{param0}?', timeout=10000)
+                        param_type = param_spec[1]
+                        if param_type[0] == '.': # Handle .3f
+                            param_type = param_type[-1]
+                        match param_type:
+                            case 'f': # Float
+                                if self._inst._is_fake:
+                                    val = random.random()
+                                else:
+                                    val = float(val)
+                            case 'b' | 'd': # Boolean or Decimal
+                                if self._inst._is_fake:
+                                    val = random.randint(0, 1)
+                                else:
+                                    val = int(float(val))
+                            case 's' | 'r': # String or radio button
+                                # The SDM3000 wraps function strings in double qoutes for
+                                # some reason
+                                val = val.strip('"').upper()
+                            case 'rv': # Voltage range
+                                if self._inst._is_fake:
+                                    val = random.choice(
+                                        list(self._RANGE_V_SCPI_READ_TO_WRITE.keys()))
+                                val = self._range_v_scpi_read_to_scpi_write(val)
+                            case 'ri': # Current range
+                                if self._inst._is_fake:
+                                    val = random.choice(
+                                        list(self._RANGE_I_SCPI_READ_TO_WRITE.keys()))
+                                val = self._range_i_scpi_read_to_scpi_write(val)
+                            case 'rr': # Resistance range
+                                if self._inst._is_fake:
+                                    val = random.choice(
+                                        list(self._RANGE_R_SCPI_READ_TO_WRITE.keys()))
+                                val = self._range_r_scpi_read_to_scpi_write(val)
+                            case 'rc': # Capacitance range
+                                if self._inst._is_fake:
+                                    val = random.choice(
+                                        list(self._RANGE_C_SCPI_READ_TO_WRITE.keys()))
+                                val = self._range_c_scpi_read_to_scpi_write(val)
+                            case 'rs': # Speed
+                                if self._inst._is_fake:
+                                    val = random.choice((0.3, 1., 10.))
+                                else:
+                                    val = self._speed_scpi_read_to_scpi_write(val)
+                            case _:
+                                assert False, f'Unknown param_type {param_type}'
+                        self._param_state[idx][param0] = val
 
-            # Copy paramset 1 -> 2-N for lack of anything better to do
-            for i in range(2, self._NUM_PARAMSET+1):
-                self._param_state[i] = self._param_state[1].copy()
+                # Copy paramset 1 -> 2-N for lack of anything better to do
+                for i in range(2, self._NUM_PARAMSET+1):
+                    self._param_state[i] = self._param_state[1].copy()
 
-            if self._debug:
-                print('** REFRESH / PARAMSET')
-                for i, param_state in enumerate(self._param_state):
-                    print(f'{i}: {self._param_state[i]}')
+                if self._debug:
+                    print('** REFRESH / PARAMSET')
+                    for i, param_state in enumerate(self._param_state):
+                        print(f'{i}: {self._param_state[i]}')
 
-            # Since everything has changed, update all the widgets
-            self._update_all_widgets()
+                # Since everything has changed, update all the widgets
+                self._update_all_widgets()
+            except NotConnected:
+                return
+            except InstrumentClosed:
+                await self._actually_close()
+                return
 
     # This writes _param_state -> instrument (opposite of refresh)
     async def _update_instrument(self, paramset_num=0, prev_state=None):
@@ -562,41 +571,47 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
         if self._debug:
             print('** MEASUREMENTS / PARAMSET')
             for i, param_state in enumerate(self._param_state):
-                print(f'{i}: {self._param_state[i]}')
+                print(f'{i}: {param_state}')
 
         triggers = self._cached_triggers
         measurements = self._cached_measurements
 
         for paramset_num in range(1, self._NUM_PARAMSET+1):
             async with self._config_lock:
-                # Hold the lock for one complete instrument update/read cycle
-                if (paramset_num != 1 and
-                    not self._widget_registry[paramset_num]['Enable'].isChecked()):
-                    continue
-                # Update the instrument for the current paramset
                 try:
-                    self._last_measurement_param_state = (
-                        await self._update_instrument(paramset_num,
-                                                    self._last_measurement_param_state))
-                except NotConnectedError:
-                    return
-                if self._inst._is_fake:
-                    val = random.random()
-                else:
+                    # Hold the lock for one complete instrument update/read cycle
+                    if (paramset_num != 1 and
+                        not self._widget_registry[paramset_num]['Enable'].isChecked()):
+                        continue
+                    # Update the instrument for the current paramset
                     try:
-                        val = float(await self._inst.query('READ?', timeout=10))
-                    except NotConnectedError:
+                        self._last_measurement_param_state = (
+                            await self._update_instrument(paramset_num,
+                                                        self._last_measurement_param_state))
+                    except NotConnected:
                         return
-                if abs(val) == 9.9e37:
-                    val = None
-                mode = self._scpi_to_mode(self._param_state[paramset_num][':FUNCTION'])
-                measurements[mode]['val'] = val
-                if val is None:
-                    text = 'Overload'
-                else:
-                    text = ('%' + measurements[mode]['format']) % val
-                    text += ' ' + measurements[mode]['unit']
-                self._widget_registry[paramset_num]['Measurement'].setText(text)
+                    if self._inst._is_fake:
+                        val = random.random()
+                    else:
+                        try:
+                            val = float(await self._inst.query('READ?', timeout=10))
+                        except NotConnected:
+                            return
+                    if abs(val) == 9.9e37:
+                        val = None
+                    mode = self._scpi_to_mode(self._param_state[paramset_num][':FUNCTION'])
+                    measurements[mode]['val'] = val
+                    if val is None:
+                        text = 'Overload'
+                    else:
+                        text = ('%' + measurements[mode]['format']) % val
+                        text += ' ' + measurements[mode]['unit']
+                    self._widget_registry[paramset_num]['Measurement'].setText(text)
+                except NotConnected:
+                    return
+                except InstrumentClosed:
+                    await self._actually_close()
+                    return
 
         # Wait until all measurements have been made and then update the display
         # widgets all at once so it looks like they were done simultaneously.
@@ -1010,11 +1025,17 @@ Connected to {self._inst.resource_name}
         """Reset the instrument and then reload the state."""
         # A reset takes around 6.75 seconds, so we wait up to 10s to be safe.
         async with self._config_lock:
-            self.setEnabled(False)
-            self.repaint()
-            await self._inst.write('*RST', timeout=10000)
-            self.refresh()
-            self.setEnabled(True)
+            try:
+                self.setEnabled(False)
+                self.repaint()
+                await self._inst.write('*RST', timeout=10000)
+                self.refresh()
+                self.setEnabled(True)
+            except NotConnected:
+                return
+            except InstrumentClosed:
+                await self._actually_close()
+                return
 
     def _menu_do_view_parameters_1(self, state):
         """Toggle visibility of the parameters row."""

@@ -45,6 +45,7 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
+                "--console-log-level", "debug",
                 "192.168.0.63"
             ]
         },
@@ -80,6 +81,7 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
+                "--console-log-level", "info",
                 "192.168.0.62",
                 "192.168.0.63",
                 "192.168.0.64"

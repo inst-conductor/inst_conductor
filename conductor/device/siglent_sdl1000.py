@@ -129,7 +129,9 @@ from conductor.device.config_widget_base import (ConfigureWidgetBase,
                                                  ListTableModel,
                                                  MultiSpeedSpinBox,
                                                  PrintableTextDialog)
-from conductor.device import Device4882, NotConnectedError
+from conductor.device import (Device4882,
+                              InstrumentClosed,
+                              NotConnected)
 
 
 class InstrumentSiglentSDL1000(Device4882):
@@ -186,6 +188,7 @@ class InstrumentSiglentSDL1000(Device4882):
 
     async def disconnect(self, *args, **kwargs):
         """Disconnect from the instrument and turn off its remote state."""
+        self._ready_to_close = False
         await self.write(':SYST:REMOTE:STATE 0')
         await super().disconnect(*args, **kwargs)
 
@@ -826,49 +829,55 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
     async def refresh(self):
         """Read all parameters from the instrument and set our internal state to match."""
         async with self._config_lock:
-            self._param_state = {} # Start with a blank slate
-            for mode, info in _SDL_MODE_PARAMS.items():
-                for param_spec in info['params']:
-                    param0, param1 = self._scpi_cmds_from_param_info(info, param_spec)
-                    if param0 in self._param_state:
-                        # Sub-modes often ask for the same data, no need to retrieve it
-                        # twice - and we will have already taken care of param1 the
-                        # previous time as well
-                        continue
-                    val = await self._inst.query(f'{param0}?')
-                    param_type = param_spec[1][-1]
-                    match param_type:
-                        case 'f': # Float
-                            val = float(val)
-                        case 'b' | 'd': # Boolean or Decimal
-                            val = int(float(val))
-                        case 's' | 'r': # String or radio button
-                            val = val.upper()
-                        case _:
-                            assert False, f'Unknown param_type {param_type}'
-                    self._param_state[param0] = val
-                    if param1 is not None:
-                        # A Boolean flag associated with param0
-                        # We let the flag override the previous value
-                        val1 = int(float(await self._inst.query(f'{param1}?')))
-                        self._param_state[param1] = val1
-                        if not val1 and self._param_state[param0] != 0:
-                            if param_type == 'f':
-                                self._param_state[param0] = 0.
-                            else:
-                                self._param_state[param0] = 0
-                            await self._inst.write(f'{param0} 0')
+            try:
+                self._param_state = {} # Start with a blank slate
+                for mode, info in _SDL_MODE_PARAMS.items():
+                    for param_spec in info['params']:
+                        param0, param1 = self._scpi_cmds_from_param_info(info, param_spec)
+                        if param0 in self._param_state:
+                            # Sub-modes often ask for the same data, no need to retrieve it
+                            # twice - and we will have already taken care of param1 the
+                            # previous time as well
+                            continue
+                        val = await self._inst.query(f'{param0}?')
+                        param_type = param_spec[1][-1]
+                        match param_type:
+                            case 'f': # Float
+                                val = float(val)
+                            case 'b' | 'd': # Boolean or Decimal
+                                val = int(float(val))
+                            case 's' | 'r': # String or radio button
+                                val = val.upper()
+                            case _:
+                                assert False, f'Unknown param_type {param_type}'
+                        self._param_state[param0] = val
+                        if param1 is not None:
+                            # A Boolean flag associated with param0
+                            # We let the flag override the previous value
+                            val1 = int(float(await self._inst.query(f'{param1}?')))
+                            self._param_state[param1] = val1
+                            if not val1 and self._param_state[param0] != 0:
+                                if param_type == 'f':
+                                    self._param_state[param0] = 0.
+                                else:
+                                    self._param_state[param0] = 0
+                                await self._inst.write(f'{param0} 0')
 
-            # Special read of the List Mode parameters
-            await self._update_list_mode_from_instrument()
+                # Special read of the List Mode parameters
+                await self._update_list_mode_from_instrument()
 
-            if self._param_state[':TRIGGER:SOURCE'] == 'MANUAL':
-                # No point in using the SDL's panel when the button isn't available
-                new_param_state = {':TRIGGER:SOURCE': 'BUS'}
-                await self._update_param_state_and_inst(new_param_state)
+                if self._param_state[':TRIGGER:SOURCE'] == 'MANUAL':
+                    # No point in using the SDL's panel when the button isn't available
+                    new_param_state = {':TRIGGER:SOURCE': 'BUS'}
+                    await self._update_param_state_and_inst(new_param_state)
 
-            # Set things like _cur_overall_mode and _cur_const_mode and update widgets
-            await self._update_state_from_param_state()
+                # Set things like _cur_overall_mode and _cur_const_mode and update widgets
+                await self._update_state_from_param_state()
+            except NotConnected:
+                return
+            except InstrumentClosed:
+                await self._actually_close()
+                return
 
     # This writes _param_state -> instrument (opposite of refresh)
     async def update_instrument(self):
@@ -877,44 +886,50 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         This is tricker than it should be, because if you send a configuration
         command to the SDL for a mode it's not currently in, it crashes!"""
         async with self._config_lock:
-            set_params = set()
-            first_list_mode_write = True
-            for mode, info in _SDL_MODE_PARAMS.items():
-                first_write = True
-                for param_spec in info['params']:
-                    if param_spec[2] is False:
-                        continue # The General False flag, all others are written
-                    param0, param1 = self._scpi_cmds_from_param_info(info, param_spec)
-                    if param0 in set_params:
-                        # Sub-modes often ask for the same data, no need to retrieve it
-                        # twice
-                        continue
-                    set_params.add(param0)
-                    if first_write and info['mode_name']:
-                        first_write = False
-                        # We have to put the instrument in the correct mode before
-                        # setting the parameters. Not necessary for "General"
-                        # (mode_name None).
-                        await self._put_inst_in_mode(mode[0], mode[1])
-                    await self._update_one_param_on_inst(param0,
-                                                         self._param_state[param0])
-                    if param1 is not None:
-                        await self._update_one_param_on_inst(param1,
-                                                             self._param_state[param1])
-                if info['mode_name'] == 'LIST' and first_list_mode_write:
-                    first_list_mode_write = False
-                    # Special write of the List Mode parameters
-                    steps = self._param_state[':LIST:STEP']
-                    for i in range(1, steps+1):
-                        await self._inst.write(
-                            f':LIST:LEVEL {i},{self._list_mode_levels[i-1]:.3f}')
-                        await self._inst.write(
-                            f':LIST:WIDTH {i},{self._list_mode_widths[i-1]:.3f}')
-                        await self._inst.write(
-                            f':LIST:SLEW {i},{self._list_mode_slews[i-1]:.3f}')
+            try:
+                set_params = set()
+                first_list_mode_write = True
+                for mode, info in _SDL_MODE_PARAMS.items():
+                    first_write = True
+                    for param_spec in info['params']:
+                        if param_spec[2] is False:
+                            continue # The General False flag, all others are written
+                        param0, param1 = self._scpi_cmds_from_param_info(info, param_spec)
+                        if param0 in set_params:
+                            # Sub-modes often ask for the same data, no need to retrieve it
+                            # twice
+                            continue
+                        set_params.add(param0)
+                        if first_write and info['mode_name']:
+                            first_write = False
+                            # We have to put the instrument in the correct mode before
+                            # setting the parameters. Not necessary for "General"
+                            # (mode_name None).
+                            await self._put_inst_in_mode(mode[0], mode[1])
+                        await self._update_one_param_on_inst(param0,
+                                                            self._param_state[param0])
+                        if param1 is not None:
+                            await self._update_one_param_on_inst(param1,
+                                                                self._param_state[param1])
+                    if info['mode_name'] == 'LIST' and first_list_mode_write:
+                        first_list_mode_write = False
+                        # Special write of the List Mode parameters
+                        steps = self._param_state[':LIST:STEP']
+                        for i in range(1, steps+1):
+                            await self._inst.write(
+                                f':LIST:LEVEL {i},{self._list_mode_levels[i-1]:.3f}')
+                            await self._inst.write(
+                                f':LIST:WIDTH {i},{self._list_mode_widths[i-1]:.3f}')
+                            await self._inst.write(
+                                f':LIST:SLEW {i},{self._list_mode_slews[i-1]:.3f}')
 
-            await self._update_state_from_param_state()
-            await self._put_inst_in_mode(self._cur_overall_mode, self._cur_const_mode)
+                await self._update_state_from_param_state()
+                await self._put_inst_in_mode(self._cur_overall_mode, self._cur_const_mode)
+            except NotConnected:
+                return
+            except InstrumentClosed:
+                await self._actually_close()
+                return
 
     def _initialize_measurements_and_triggers(self):
         """Initialize the measurements and triggers cache with names and formats."""
@@ -978,123 +993,96 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
     async def _update_measurements_and_triggers(self):
         """Read current values and update control panel display."""
         # Update the load on/off state in case we hit a protection limit
-        async with self._config_lock:
-            try:
-                input_state = int(await self._inst.query(':INPUT:STATE?'))
-            except NotConnectedError:
-                return
-            if self._param_state[':INPUT:STATE'] != input_state:
-                # No need to update the instrument, since it changed the state for us
-                try:
-                    await self._update_load_state(input_state, update_inst=False)
-                except NotConnectedError:
-                    return
-
         measurements = self._cached_measurements
         triggers = self._cached_triggers
 
-        async with self._config_lock:
-            triggers['LoadOn']['val'] =      bool(input_state)
-            triggers['ListRunning']['val'] = bool(self._list_mode_running)
-
-        voltage = None
-        if self._enable_measurement_v:
-            # Voltage is available regardless of the input state
+        try:
             async with self._config_lock:
-                try:
+                input_state = int(await self._inst.query(':INPUT:STATE?'))
+                if self._param_state[':INPUT:STATE'] != input_state:
+                    # No need to update the instrument, since it changed the state for us
+                    await self._update_load_state(input_state, update_inst=False)
+
+            async with self._config_lock:
+                triggers['LoadOn']['val'] =      bool(input_state)
+                triggers['ListRunning']['val'] = bool(self._list_mode_running)
+
+            voltage = None
+            if self._enable_measurement_v:
+                # Voltage is available regardless of the input state
+                async with self._config_lock:
                     voltage = await self._inst.measure_voltage()
-                except NotConnectedError:
-                    return
-        measurements['Voltage']['val'] = voltage
+            measurements['Voltage']['val'] = voltage
 
-        current = None
-        if self._enable_measurement_c and input_state:
-            # Current is only available when the load is on
-            async with self._config_lock:
-                try:
+            current = None
+            if self._enable_measurement_c and input_state:
+                # Current is only available when the load is on
+                async with self._config_lock:
                     current = await self._inst.measure_current()
-                except NotConnectedError:
-                    return
-        measurements['Current']['val'] = current
+            measurements['Current']['val'] = current
 
-        power = None
-        w = self._widget_registry['MeasureP']
-        if self._enable_measurement_p and input_state:
-            # Power is only available when the load is on
-            async with self._config_lock:
-                try:
+            power = None
+            w = self._widget_registry['MeasureP']
+            if self._enable_measurement_p and input_state:
+                # Power is only available when the load is on
+                async with self._config_lock:
                     power = await self._inst.measure_power()
-                except NotConnectedError:
-                    return
-        measurements['Power']['val'] = power
+            measurements['Power']['val'] = power
 
-        resistance = None
-        w = self._widget_registry['MeasureR']
-        if self._enable_measurement_r and input_state:
-            # Resistance is only available when the load is on
-            async with self._config_lock:
-                try:
+            resistance = None
+            w = self._widget_registry['MeasureR']
+            if self._enable_measurement_r and input_state:
+                # Resistance is only available when the load is on
+                async with self._config_lock:
                     resistance = await self._inst.measure_resistance()
-                except NotConnectedError:
-                    return
-        measurements['Resistance']['val'] = resistance
+            measurements['Resistance']['val'] = resistance
 
-        trise = None
-        w = self._widget_registry['MeasureTRise']
-        if self._enable_measurement_trise and input_state:
-            # Trise is only available when the load is on
-            async with self._config_lock:
-                try:
+            trise = None
+            w = self._widget_registry['MeasureTRise']
+            if self._enable_measurement_trise and input_state:
+                # Trise is only available when the load is on
+                async with self._config_lock:
                     trise = await self._inst.measure_trise()
-                except NotConnectedError:
-                    return
-        measurements['TRise']['val'] = trise
+            measurements['TRise']['val'] = trise
 
-        tfall = None
-        w = self._widget_registry['MeasureTFall']
-        if self._enable_measurement_tfall and input_state:
-            # Tfall is only available when the load is on
-            async with self._config_lock:
-                try:
+            tfall = None
+            w = self._widget_registry['MeasureTFall']
+            if self._enable_measurement_tfall and input_state:
+                # Tfall is only available when the load is on
+                async with self._config_lock:
                     tfall = await self._inst.measure_tfall()
-                except NotConnectedError:
-                    return
-        measurements['TFall']['val'] = tfall
+            measurements['TFall']['val'] = tfall
 
-        disch_time = None
-        disch_cap = None
-        add_cap = None
-        total_cap = None
-        if self._cur_overall_mode == 'Battery':
-            # Battery measurements are available regardless of load state
-            if self._batt_log_initial_voltage is None:
-                self._batt_log_initial_voltage = voltage
-            async with self._config_lock:
-                try:
+            disch_time = None
+            disch_cap = None
+            add_cap = None
+            total_cap = None
+            if self._cur_overall_mode == 'Battery':
+                # Battery measurements are available regardless of load state
+                if self._batt_log_initial_voltage is None:
+                    self._batt_log_initial_voltage = voltage
+                async with self._config_lock:
                     disch_time = await self._inst.measure_battery_time()
-                except NotConnectedError:
-                    return
-            async with self._config_lock:
-                try:
+                async with self._config_lock:
                     disch_cap = await self._inst.measure_battery_capacity()
-                except NotConnectedError:
-                    return
-            async with self._config_lock:
-                try:
+                async with self._config_lock:
                     add_cap = await self._inst.measure_battery_add_capacity()
-                except NotConnectedError:
-                    return
 
-            # When the LOAD is OFF, we have already updated the ADDCAP to include the
-            # current test results, so we don't want to add it in a second time
-            if input_state:
-                total_cap = disch_cap+add_cap
-            else:
-                total_cap = add_cap
-        measurements['Discharge Time']['val'] = disch_time
-        measurements['Capacity']['val'] = disch_cap
-        measurements['Addl Capacity']['val'] = add_cap
-        measurements['Total Capacity']['val'] = total_cap
+                # When the LOAD is OFF, we have already updated the ADDCAP to include the
+                # current test results, so we don't want to add it in a second time
+                if input_state:
+                    total_cap = disch_cap+add_cap
+                else:
+                    total_cap = add_cap
+                measurements['Discharge Time']['val'] = disch_time
+                measurements['Capacity']['val'] = disch_cap
+                measurements['Addl Capacity']['val'] = add_cap
+                measurements['Total Capacity']['val'] = total_cap
+        except NotConnected:
+            return
+        except InstrumentClosed:
+            await self._actually_close()
+            return
 
         w = self._widget_registry['MeasureV']
         if self._enable_measurement_v:
@@ -1904,7 +1892,13 @@ Alt+T       Trigger
         self.setEnabled(False)
         self.repaint()
         async with self._config_lock:
-            await self._inst.write('*RST', timeout=10000)
+            try:
+                await self._inst.write('*RST', timeout=10000)
+            except NotConnected:
+                return
+            except InstrumentClosed:
+                await self._actually_close()
+                return
             await self.refresh()
         self.setEnabled(True)
 
@@ -1955,97 +1949,103 @@ Alt+T       Trigger
         if not rb.isChecked():
             return
         async with self._config_lock:
-            self._cur_overall_mode = rb.wid
-            self._cur_dynamic_mode = None
-            new_param_state = {}
-            new_param_state[':EXT:MODE'] = 'INT'  # Overridden by 'Ext' below
-            # Special handling for each button
-            match self._cur_overall_mode:
-                case 'Basic':
-                    self._cur_const_mode = self._param_state[':FUNCTION'].title()
-                    if self._cur_const_mode in ('Led', 'OCP', 'OPP'):
-                        # LED is weird in that the instrument treats it as a BASIC mode
-                        # but there's no CV/CC/CP/CR choice.
-                        # We lose information going from OCP/OPP back to Basic because
-                        # we don't know which basic mode we were in before!
-                        self._cur_const_mode = 'Voltage' # For lack of anything else to do
-                    # Force update since this does more than set a parameter - it switches
-                    # modes
-                    self._param_state[':FUNCTION'] = None
-                    new_param_state[':FUNCTION'] = self._cur_const_mode.upper()
-                    self._param_state[':FUNCTION:MODE'] = 'BASIC'
-                case 'Dynamic':
-                    self._cur_const_mode = (
-                        self._param_state[':FUNCTION:TRANSIENT'].title())
-                    # Dynamic also has sub-modes - Continuous, Pulse, Toggle
-                    param_info = self._cur_mode_param_info(null_dynamic_mode_ok=True)
-                    mode_name = param_info['mode_name']
-                    self._cur_dynamic_mode = (
-                        self._param_state[f':{mode_name}:TRANSIENT:MODE'].title())
-                    # Force update since this does more than set a parameter - it switches
-                    # modes
-                    self._param_state[':FUNCTION:TRANSIENT'] = None
-                    new_param_state[':FUNCTION:TRANSIENT'] = self._cur_const_mode.upper()
-                    self._param_state[':FUNCTION:MODE'] = 'TRAN'
-                case 'LED':
-                    # Force update since this does more than set a parameter - it switches
-                    # modes
-                    self._param_state[':FUNCTION'] = None
-                    new_param_state[':FUNCTION'] = 'LED' # LED is consider a BASIC mode
-                    self._param_state[':FUNCTION:MODE'] = 'BASIC'
-                    self._cur_const_mode = None
-                case 'Battery':
-                    # This is not a parameter with a state - it's just a command to switch
-                    # modes. The normal :FUNCTION tells us we're in the Battery mode, but it
-                    # doesn't allow us to SWITCH TO the Battery mode!
-                    await self._inst.write(':BATTERY:FUNC')
-                    self._param_state[':FUNCTION:MODE'] = 'BATTERY'
-                    self._cur_const_mode = self._param_state[':BATTERY:MODE'].title()
-                case 'OCPT':
-                    # This is not a parameter with a state - it's just a command to switch
-                    # modes. The normal :FUNCTION tells us we're in OCP mode, but it
-                    # doesn't allow us to SWITCH TO the OCP mode!
-                    await self._inst.write(':OCP:FUNC')
-                    self._param_state[':FUNCTION:MODE'] = 'OCP'
-                    self._cur_const_mode = None
-                case 'OPPT':
-                    # This is not a parameter with a state - it's just a command to switch
-                    # modes. The normal :FUNCTION tells us we're in OPP mode, but it
-                    # doesn't allow us to SWITCH TO the OPP mode!
-                    await self._inst.write(':OPP:FUNC')
-                    self._param_state[':FUNCTION:MODE'] = 'OPP'
-                    self._cur_const_mode = None
-                case 'Ext \u26A0':
-                    # EXTI and EXTV are really two different modes, but we treat them
-                    # as one for consistency. Unfortunately that means when the user switches
-                    # to "EXT" mode, you don't know whether they actually want V or I,
-                    # so we just assume V.
-                    self._cur_const_mode = 'Voltage'
-                    new_param_state[':EXT:MODE'] = 'EXTV'
-                case 'List':
-                    # This is not a parameter with a state - it's just a command to switch
-                    # modes. The normal :FUNCTION tells us we're in List mode, but it
-                    # doesn't allow us to SWITCH TO the List mode!
-                    await self._inst.write(':LIST:STATE:ON')
-                    self._param_state[':FUNCTION:MODE'] = 'LIST'
-                    self._cur_const_mode = self._param_state[':LIST:MODE'].title()
-                case 'Program':
-                    # This is not a parameter with a state - it's just a command to switch
-                    # modes. The normal :FUNCTION tells us we're in List mode, but it
-                    # doesn't allow us to SWITCH TO the List mode!
-                    await self._inst.write(':PROGRAM:STATE:ON')
-                    self._param_state[':FUNCTION:MODE'] = 'PROGRAM'
-                    self._cur_const_mode = None
+            try:
+                self._cur_overall_mode = rb.wid
+                self._cur_dynamic_mode = None
+                new_param_state = {}
+                new_param_state[':EXT:MODE'] = 'INT'  # Overridden by 'Ext' below
+                # Special handling for each button
+                match self._cur_overall_mode:
+                    case 'Basic':
+                        self._cur_const_mode = self._param_state[':FUNCTION'].title()
+                        if self._cur_const_mode in ('Led', 'OCP', 'OPP'):
+                            # LED is weird in that the instrument treats it as a BASIC mode
+                            # but there's no CV/CC/CP/CR choice.
+                            # We lose information going from OCP/OPP back to Basic because
+                            # we don't know which basic mode we were in before!
+                            self._cur_const_mode = 'Voltage' # For lack of anything else to do
+                        # Force update since this does more than set a parameter - it switches
+                        # modes
+                        self._param_state[':FUNCTION'] = None
+                        new_param_state[':FUNCTION'] = self._cur_const_mode.upper()
+                        self._param_state[':FUNCTION:MODE'] = 'BASIC'
+                    case 'Dynamic':
+                        self._cur_const_mode = (
+                            self._param_state[':FUNCTION:TRANSIENT'].title())
+                        # Dynamic also has sub-modes - Continuous, Pulse, Toggle
+                        param_info = self._cur_mode_param_info(null_dynamic_mode_ok=True)
+                        mode_name = param_info['mode_name']
+                        self._cur_dynamic_mode = (
+                            self._param_state[f':{mode_name}:TRANSIENT:MODE'].title())
+                        # Force update since this does more than set a parameter - it switches
+                        # modes
+                        self._param_state[':FUNCTION:TRANSIENT'] = None
+                        new_param_state[':FUNCTION:TRANSIENT'] = self._cur_const_mode.upper()
+                        self._param_state[':FUNCTION:MODE'] = 'TRAN'
+                    case 'LED':
+                        # Force update since this does more than set a parameter - it switches
+                        # modes
+                        self._param_state[':FUNCTION'] = None
+                        new_param_state[':FUNCTION'] = 'LED' # LED is consider a BASIC mode
+                        self._param_state[':FUNCTION:MODE'] = 'BASIC'
+                        self._cur_const_mode = None
+                    case 'Battery':
+                        # This is not a parameter with a state - it's just a command to switch
+                        # modes. The normal :FUNCTION tells us we're in the Battery mode, but it
+                        # doesn't allow us to SWITCH TO the Battery mode!
+                        await self._inst.write(':BATTERY:FUNC')
+                        self._param_state[':FUNCTION:MODE'] = 'BATTERY'
+                        self._cur_const_mode = self._param_state[':BATTERY:MODE'].title()
+                    case 'OCPT':
+                        # This is not a parameter with a state - it's just a command to switch
+                        # modes. The normal :FUNCTION tells us we're in OCP mode, but it
+                        # doesn't allow us to SWITCH TO the OCP mode!
+                        await self._inst.write(':OCP:FUNC')
+                        self._param_state[':FUNCTION:MODE'] = 'OCP'
+                        self._cur_const_mode = None
+                    case 'OPPT':
+                        # This is not a parameter with a state - it's just a command to switch
+                        # modes. The normal :FUNCTION tells us we're in OPP mode, but it
+                        # doesn't allow us to SWITCH TO the OPP mode!
+                        await self._inst.write(':OPP:FUNC')
+                        self._param_state[':FUNCTION:MODE'] = 'OPP'
+                        self._cur_const_mode = None
+                    case 'Ext \u26A0':
+                        # EXTI and EXTV are really two different modes, but we treat them
+                        # as one for consistency. Unfortunately that means when the user switches
+                        # to "EXT" mode, you don't know whether they actually want V or I,
+                        # so we just assume V.
+                        self._cur_const_mode = 'Voltage'
+                        new_param_state[':EXT:MODE'] = 'EXTV'
+                    case 'List':
+                        # This is not a parameter with a state - it's just a command to switch
+                        # modes. The normal :FUNCTION tells us we're in List mode, but it
+                        # doesn't allow us to SWITCH TO the List mode!
+                        await self._inst.write(':LIST:STATE:ON')
+                        self._param_state[':FUNCTION:MODE'] = 'LIST'
+                        self._cur_const_mode = self._param_state[':LIST:MODE'].title()
+                    case 'Program':
+                        # This is not a parameter with a state - it's just a command to switch
+                        # modes. The normal :FUNCTION tells us we're in List mode, but it
+                        # doesn't allow us to SWITCH TO the List mode!
+                        await self._inst.write(':PROGRAM:STATE:ON')
+                        self._param_state[':FUNCTION:MODE'] = 'PROGRAM'
+                        self._cur_const_mode = None
 
-            # Changing the mode turns off the load and short.
-            # We have to do this manually in order for the later mode change to take effect.
-            # If you try to change mode while the load is on, the SDL turns off the load,
-            # but then ignores the mode change.
-            await self._update_load_state(0)
-            await self._update_short_state(0)
+                # Changing the mode turns off the load and short.
+                # We have to do this manually in order for the later mode change to take effect.
+                # If you try to change mode while the load is on, the SDL turns off the load,
+                # but then ignores the mode change.
+                await self._update_load_state(0)
+                await self._update_short_state(0)
 
-            await self._update_param_state_and_inst(new_param_state)
-            await self._update_widgets()
+                await self._update_param_state_and_inst(new_param_state)
+                await self._update_widgets()
+            except NotConnected:
+                return
+            except InstrumentClosed:
+                await self._actually_close()
+                return
 
     @asyncSlotSender()
     async def _on_click_dynamic_mode(self, rb):
@@ -2056,22 +2056,28 @@ Alt+T       Trigger
             return
 
         async with self._config_lock:
-            self._cur_dynamic_mode = rb.wid
+            try:
+                self._cur_dynamic_mode = rb.wid
 
-            # Changing the mode turns off the load and short.
-            # We have to do this manually in order for the later mode change to take effect.
-            # If you try to change mode while the load is on, the SDL turns off the load,
-            # but then ignores the mode change.
-            await self._update_load_state(0)
-            await self._update_short_state(0)
+                # Changing the mode turns off the load and short.
+                # We have to do this manually in order for the later mode change to take effect.
+                # If you try to change mode while the load is on, the SDL turns off the load,
+                # but then ignores the mode change.
+                await self._update_load_state(0)
+                await self._update_short_state(0)
 
-            info = self._cur_mode_param_info()
-            mode_name = info['mode_name']
-            new_param_state = {':FUNCTION:TRANSIENT': self._cur_const_mode.upper(),
-                            f':{mode_name}:TRANSIENT:MODE': rb.wid.upper()}
+                info = self._cur_mode_param_info()
+                mode_name = info['mode_name']
+                new_param_state = {':FUNCTION:TRANSIENT': self._cur_const_mode.upper(),
+                                f':{mode_name}:TRANSIENT:MODE': rb.wid.upper()}
 
-            await self._update_param_state_and_inst(new_param_state)
-            await self._update_widgets()
+                await self._update_param_state_and_inst(new_param_state)
+                await self._update_widgets()
+            except NotConnected:
+                return
+            except InstrumentClosed:
+                await self._actually_close()
+                return
 
     @asyncSlotSender()
     async def _on_click_const_mode(self, rb):

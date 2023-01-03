@@ -64,7 +64,9 @@ from conductor.device.config_widget_base import (ConfigureWidgetBase,
                                                  ListTableModel,
                                                  LongClickButton,
                                                  MultiSpeedSpinBox)
-from conductor.device import Device4882, NotConnectedError
+from conductor.device import (Device4882,
+                              InstrumentClosed,
+                              NotConnected)
 
 
 class InstrumentSiglentSPD3303(Device4882):
@@ -111,6 +113,8 @@ class InstrumentSiglentSPD3303(Device4882):
         self._long_name = f'{self._model} @ {self._resource_name}'
 
     async def disconnect(self, *args, **kwargs):
+        """Disconnect from the instrument and turn off its remote state."""
+        self._ready_to_close = False
         await super().disconnect(*args, **kwargs)
 
     def configure_widget(self, main_window):
@@ -242,58 +246,71 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
     async def refresh(self):
         """Read all parameters from the instrument and set our internal state to match."""
         async with self._config_lock:
-            status = await self._inst.query('SYST:STATUS?')
-            status = int(status.replace('0x', ''), base=16)
-            for ch in range(2):
-                self._psu_voltage[ch] = float(await self._inst.query(f'CH{ch+1}:VOLT?'))
-                self._psu_current[ch] = float(
-                    await self._inst.query(f'CH{ch+1}:CURRENT?'))
-                self._psu_on_off[ch] = bool(status & (1 << (ch+4)))
-                for entry in range(5):
-                    # TIMER:SET? returns an extra comma at the end for some reason
-                    res = await self._inst.query(f'TIMER:SET? CH{ch+1},{entry+1}')
-                    res = res.split(',')
-                    volt = float(res[0])
-                    curr = float(res[1])
-                    timer = float(res[2])
-                    self._psu_timer_params[ch][entry] = [volt, curr, timer]
-            # There's no way to know if CH3 is on or off
-            self._psu_on_off[2] = False
-            match status & 0x0C:
-                case 0x04:
-                    self._psu_mode = 'I'
-                case 0x08:
-                    self._psu_mode = 'P'
-                case 0x0C:
-                    self._psu_mode = 'S'
+            try:
+                status = await self._inst.query('SYST:STATUS?')
+                status = int(status.replace('0x', ''), base=16)
+                for ch in range(2):
+                    self._psu_voltage[ch] = float(await self._inst.query(f'CH{ch+1}:VOLT?'))
+                    self._psu_current[ch] = float(
+                        await self._inst.query(f'CH{ch+1}:CURRENT?'))
+                    self._psu_on_off[ch] = bool(status & (1 << (ch+4)))
+                    for entry in range(5):
+                        # TIMER:SET? returns an extra comma at the end for some reason
+                        res = await self._inst.query(f'TIMER:SET? CH{ch+1},{entry+1}')
+                        res = res.split(',')
+                        volt = float(res[0])
+                        curr = float(res[1])
+                        timer = float(res[2])
+                        self._psu_timer_params[ch][entry] = [volt, curr, timer]
+                # There's no way to know if CH3 is on or off
+                self._psu_on_off[2] = False
+                match status & 0x0C:
+                    case 0x04:
+                        self._psu_mode = 'I'
+                    case 0x08:
+                        self._psu_mode = 'P'
+                    case 0x0C:
+                        self._psu_mode = 'S'
 
-            await self._update_widgets()
+                await self._update_widgets()
+            except NotConnected:
+                return
+            except InstrumentClosed:
+                await self._actually_close()
+                return
 
     # This writes internal parameter state -> instrument (opposite of refresh)
     async def update_instrument(self):
         """Update the instrument with the current parameter state."""
         async with self._config_lock:
-            status = 0
-            for ch in range(2):
-                volt = self._psu_voltage[ch]
-                curr = self._psu_current[ch]
-                await self._inst.write(f'CH{ch+1}:VOLT {volt:.3f}')
-                await self._inst.write(f'CH{ch+1}:CURR {volt:.3f}')
-                status |= (1 << (ch+4)) and self._psu_on_off[ch]
-                for entry in range(5):
-                    volt, curr, timer = self._psu_timer_params[ch][entry]
-                    await self._inst.write(
-                        f'TIMER:SET CH{ch+1},{entry+1},{volt:.3f},{curr:.3f},{timer:.3f}')
-            for ch in range(3):
-                on_off = 'ON' if self._psu_on_off[ch] else 'OFF'
-                await self._inst.write(f'OUTPUT CH{ch+1},{on_off}')
-            match self._psu_mode:
-                case 'I':
-                    status |= 0x04
-                case 'P':
-                    status |= 0x08
-                case 'S':
-                    status |= 0x0C
+            try:
+                status = 0
+                for ch in range(2):
+                    volt = self._psu_voltage[ch]
+                    curr = self._psu_current[ch]
+                    await self._inst.write(f'CH{ch+1}:VOLT {volt:.3f}')
+                    await self._inst.write(f'CH{ch+1}:CURR {volt:.3f}')
+                    status |= (1 << (ch+4)) and self._psu_on_off[ch]
+                    for entry in range(5):
+                        volt, curr, timer = self._psu_timer_params[ch][entry]
+                        await self._inst.write(
+                            f'TIMER:SET CH{ch+1},{entry+1},{volt:.3f},{curr:.3f},{timer:.3f}')
+                for ch in range(3):
+                    on_off = 'ON' if self._psu_on_off[ch] else 'OFF'
+                    await self._inst.write(f'OUTPUT CH{ch+1},{on_off}')
+                match self._psu_mode:
+                    case 'I':
+                        status |= 0x04
+                    case 'P':
+                        status |= 0x08
+                    case 'S':
+                        status |= 0x0C
+                ### XXX What to do with status?
+            except NotConnected:
+                return
+            except InstrumentClosed:
+                await self._actually_close()
+                return
 
     def _initialize_measurements_and_triggers(self):
         """Initialize the measurements and triggers cache with names and formats."""
@@ -353,69 +370,75 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
         measurements = self._cached_measurements
         triggers = self._cached_triggers
 
-        async with self._config_lock:
-            try:
-                status = int((await self._inst.query('SYST:STATUS?')).replace('0x', ''),
-                            base=16)
-            except NotConnectedError:
-                return
-            self._psu_cc[0] = bool(status & 0x01)
-            self._psu_cc[1] = bool(status & 0x02)
-            self._psu_on_off[0] = bool(status & 0x10)
-            self._psu_on_off[1] = bool(status & 0x20)
-            self._update_output_on_off_buttons()
+        try:
+            async with self._config_lock:
+                try:
+                    status = int((await self._inst.query('SYST:STATUS?')).replace('0x', ''),
+                                base=16)
+                except NotConnected:
+                    return
+                self._psu_cc[0] = bool(status & 0x01)
+                self._psu_cc[1] = bool(status & 0x02)
+                self._psu_on_off[0] = bool(status & 0x10)
+                self._psu_on_off[1] = bool(status & 0x20)
+                self._update_output_on_off_buttons()
 
-        async with self._config_lock:
-            triggers['CH1On']['val'] = self._psu_on_off[0]
-            triggers['CH2On']['val'] = self._psu_on_off[1]
-            triggers['CH1CV']['val'] = not self._psu_cc[0]
-            triggers['CH2CV']['val'] = not self._psu_cc[1]
-            triggers['CH1CC']['val'] = self._psu_cc[0]
-            triggers['CH2CC']['val'] = self._psu_cc[1]
-            triggers['CH1TimerRunning']['val'] = self._timer_mode_running[0]
-            triggers['CH2TimerRunning']['val'] = self._timer_mode_running[1]
+            async with self._config_lock:
+                triggers['CH1On']['val'] = self._psu_on_off[0]
+                triggers['CH2On']['val'] = self._psu_on_off[1]
+                triggers['CH1CV']['val'] = not self._psu_cc[0]
+                triggers['CH2CV']['val'] = not self._psu_cc[1]
+                triggers['CH1CC']['val'] = self._psu_cc[0]
+                triggers['CH2CC']['val'] = self._psu_cc[1]
+                triggers['CH1TimerRunning']['val'] = self._timer_mode_running[0]
+                triggers['CH2TimerRunning']['val'] = self._timer_mode_running[1]
 
-        # XXX THIS IS DOING A ROLLING UPDATE INSTEAD OF UPDATING ALL THE
-        # VALUES AT ONCE
-        for ch in range(2):
-            voltage = None
-            w = self._widget_registry[f'MeasureV{ch}']
-            if not self._enable_measurement_v or not self._psu_on_off[ch]:
-                w.setText('---  V')
-            else:
-                async with self._config_lock:
-                    try:
-                        voltage = await self._inst.measure_voltage(ch+1)
-                    except NotConnectedError:
-                        return
-                    w.setText(f'{voltage:6.3f} V')
-            measurements[f'Voltage{ch+1}']['val'] = voltage
+            # XXX THIS IS DOING A ROLLING UPDATE INSTEAD OF UPDATING ALL THE
+            # VALUES AT ONCE
+            for ch in range(2):
+                voltage = None
+                w = self._widget_registry[f'MeasureV{ch}']
+                if not self._enable_measurement_v or not self._psu_on_off[ch]:
+                    w.setText('---  V')
+                else:
+                    async with self._config_lock:
+                        try:
+                            voltage = await self._inst.measure_voltage(ch+1)
+                        except NotConnected:
+                            return
+                        w.setText(f'{voltage:6.3f} V')
+                measurements[f'Voltage{ch+1}']['val'] = voltage
 
-            current = None
-            w = self._widget_registry[f'MeasureC{ch}']
-            if not self._enable_measurement_c or not self._psu_on_off[ch]:
-                w.setText('---  A')
-            else:
-                async with self._config_lock:
-                    try:
-                        current = await self._inst.measure_current(ch+1)
-                    except NotConnectedError:
-                        return
-                    w.setText(f'{current:5.3f} A')
-            measurements[f'Current{ch+1}']['val'] = current
+                current = None
+                w = self._widget_registry[f'MeasureC{ch}']
+                if not self._enable_measurement_c or not self._psu_on_off[ch]:
+                    w.setText('---  A')
+                else:
+                    async with self._config_lock:
+                        try:
+                            current = await self._inst.measure_current(ch+1)
+                        except NotConnected:
+                            return
+                        w.setText(f'{current:5.3f} A')
+                measurements[f'Current{ch+1}']['val'] = current
 
-            power = None
-            w = self._widget_registry[f'MeasureP{ch}']
-            if not self._enable_measurement_p or not self._psu_on_off[ch]:
-                w.setText('---  W')
-            else:
-                async with self._config_lock:
-                    try:
-                        power = await self._inst.measure_power(ch+1)
-                    except NotConnectedError:
-                        return
-                    w.setText(f'{power:6.3f} W')
-            measurements[f'Power{ch+1}']['val'] = power
+                power = None
+                w = self._widget_registry[f'MeasureP{ch}']
+                if not self._enable_measurement_p or not self._psu_on_off[ch]:
+                    w.setText('---  W')
+                else:
+                    async with self._config_lock:
+                        try:
+                            power = await self._inst.measure_power(ch+1)
+                        except NotConnected:
+                            return
+                        w.setText(f'{power:6.3f} W')
+                measurements[f'Power{ch+1}']['val'] = power
+        except NotConnected:
+            return
+        except InstrumentClosed:
+            await self._actually_close()
+            return
 
         # Wait until all measurements have been made and then update the display
         # widgets all at once so it looks like they were done simultaneously.

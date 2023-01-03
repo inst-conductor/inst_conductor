@@ -1,7 +1,6 @@
 ** General **
 
 - Bugs:
-  * Config Widget closeEvent doesn't call device_window_closed due to async problem
   * Find better directory for config.ini file since self-extracting binary's directory
     will go away on close
   - Alt+Mouse Wheel does not move the 0.001 digit like it should (known Qt bug)
@@ -70,8 +69,8 @@
 ** SDL **
 
 - Bugs:
-  - Disable all input during refresh()
-  - Fix bug where battery report shows up instantly when starting up already in batt mode
+  * Disable all input during refresh()
+  * Fix bug where battery report shows up instantly when starting up already in batt mode
 
 - Enhancements:
   - Add progress bar during refresh()
@@ -108,15 +107,15 @@
 - Bugs:
   * Not all instrument modes are implemented
   * Relative measurements not implemented
-  - Setting auto range should grey out range radio buttons
+  * Setting auto range should grey out range radio buttons
 
 - Enhancements:
-  - Put measurements together with their parameters
-  - Refresh from instrument: Show warning since it is only updating the first
+  * Put measurements together with their parameters
+  * Refresh from instrument: Show warning since it is only updating the first
     configuration and overwriting the others. Also disable other measurements.
-  - Add safety interlock for multiple measurements (e.g. no voltage and resistance)
-  - Add better units on display (e.g. VDC or VAC)
-  - Add sub-units on display (e.g. mVDC or uVDC)
+  * Add safety interlock for multiple measurements (e.g. no voltage and resistance)
+  * Add better units on display (e.g. VDC or VAC)
+  * Add sub-units on display (e.g. mVDC or uVDC)
   - Change colors to the side of each set of parameters to they are accessible to
     color-blind people
   - Handle 3045X, 3055, and 3065X with different numbers of digits

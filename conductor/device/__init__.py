@@ -21,7 +21,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ################################################################################
 
-from .device import (NotConnectedError,
+from .device import (InstrumentClosed,
+                     NotConnected,
                      Device4882)
 from .siglent_sdl1000 import InstrumentSiglentSDL1000
 from .siglent_sdm3000 import InstrumentSiglentSDM3000

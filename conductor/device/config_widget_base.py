@@ -45,6 +45,10 @@ from conductor.qasync.qasync_helper import (QAsyncInputDialog,
                                             QAsyncMessageBox)
 from conductor.stylesheet import QSS_THEME
 
+from conductor.device import (InstrumentClosed,
+                              NotConnected)
+
+
 class ConfigureWidgetBase(QWidget):
     """The base class for all instrument configuration widgets.
 
@@ -67,6 +71,11 @@ class ConfigureWidgetBase(QWidget):
     async def update_measurements_and_triggers(self):
         """Read current values, update control panel display, return the values."""
         raise NotImplementedError
+
+    @property
+    def connected(self):
+        """See if the associated instrument is still connected."""
+        return self._inst.connected
 
     ### Internal utility functions.
 
@@ -178,14 +187,32 @@ class ConfigureWidgetBase(QWidget):
         """Execute Help:About menu option."""
         raise NotImplementedError
 
-    # @asyncSlot()
     def closeEvent(self, event):
-        """Handle window close event by disconnecting from the instrument."""
-        # XXX
-        # await self._inst.disconnect()
-        # Notify the main widget so that all of the UI lists and whatnot can be updated.
-        # await self._main_window.device_window_closed(self._inst)
+        """Handle window close event.
+
+        We really want to disconnect from the instrument and notify the main_window
+        here, but we can't because of a problem with qasyncio. The closeEvent()
+        slot can't be marked asyncSlot because it throws an exception about a
+        TypeError and invalid return type. This exception can't be caught and appears
+        to be down at the C interface level. So we do a hack and simply mark
+        the instrument as read_to_close, and the next time we do anything with it
+        we close it."""
+        self._inst._ready_to_close = True
         super().closeEvent(event)
+
+    async def _actually_close(self):
+        """Actually do the close operation in an async environment.
+
+        See above.
+        """
+        self._inst.ready_to_close = False # Want this to actually succeed
+        try:
+            await self._inst.disconnect()
+        except (InstrumentClosed, NotConnected):
+            pass
+        # Notify the main widget so that all of the UI lists and whatnot can be updated.
+        await self._main_window.device_window_closed(self._inst)
+
 
 class PrintableTextDialog(QDialog):
     """Text-containing Dialog that can be saved and printed."""
