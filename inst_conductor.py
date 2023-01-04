@@ -65,9 +65,11 @@ async def main():
 
 if __name__ == "__main__":
     prog_dir = os.path.dirname(__main__.__file__)
+    home_dir = os.path.expanduser('~')
+    os.makedirs(os.path.join(home_dir, '.inst_conductor'), exist_ok=True)
     default_logfile = os.path.join(prog_dir, 'inst_conductor.log')
-    default_config_file = os.path.join(prog_dir, 'inst_conductor.ini')
-
+    default_config_file = os.path.join(home_dir, '.inst_conductor',
+                                       'inst_conductor.ini')
     parser = argparse.ArgumentParser(prog='inst_conductor')
     parser.add_argument('args', nargs=argparse.REMAINDER)
     log.add_arguments(parser, default_logfile, default_config_file)

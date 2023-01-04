@@ -1,8 +1,6 @@
 ** General **
 
 - Bugs:
-  * Find better directory for config.ini file since self-extracting binary's directory
-    will go away on close
   - Alt+Mouse Wheel does not move the 0.001 digit like it should (known Qt bug)
     Perhaps related to: https://bugreports.qt.io/browse/QTBUG-30948
 
@@ -12,6 +10,8 @@
   - Write help for each instrument
   - Add overall README file
   - Look into tab focus order
+  - Add buttons to each instrument to open a plotting window or histogram window the
+    shows the current measurement
 
 - Major new features:
   - Add ability to step through various curves while changing parameters for an instrument
@@ -114,8 +114,6 @@
   * Refresh from instrument: Show warning since it is only updating the first
     configuration and overwriting the others. Also disable other measurements.
   * Add safety interlock for multiple measurements (e.g. no voltage and resistance)
-  * Add better units on display (e.g. VDC or VAC)
-  * Add sub-units on display (e.g. mVDC or uVDC)
   - Change colors to the side of each set of parameters to they are accessible to
     color-blind people
   - Handle 3045X, 3055, and 3065X with different numbers of digits

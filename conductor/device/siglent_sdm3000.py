@@ -366,8 +366,6 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
     _NUM_PARAMSET = 4
 
     def __init__(self, *args, **kwargs):
-        self._debug = False
-
         # Override the widget registry to be paramset-specific.
         self._widget_registry = [{} for i in range(self._NUM_PARAMSET+1)]
 
@@ -479,10 +477,9 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                 for i in range(2, self._NUM_PARAMSET+1):
                     self._param_state[i] = self._param_state[1].copy()
 
-                if self._debug:
-                    print('** REFRESH / PARAMSET')
+                    self._inst._logger.debug('** REFRESH / PARAMSET')
                     for i, param_state in enumerate(self._param_state):
-                        print(f'{i}: {self._param_state[i]}')
+                        self._inst._logger.debug(f'{i}: {self._param_state[i]}')
 
                 # Since everything has changed, update all the widgets
                 self._update_all_widgets()
@@ -508,41 +505,84 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
         """Initialize the measurements and triggers cache with names and formats."""
         triggers = {}
         measurements = {
-            'DC Voltage':       {'name':   'DC Voltage',
-                                 'unit':   'V',
-                                 'format': '10.6f',
-                                 'val':    None},
-            'AC Voltage':       {'name':   'AC Voltage',
-                                 'unit':   'V',
-                                 'format': '10.6f',
-                                 'val':    None},
-            'DC Current':       {'name':   'DC Current',
-                                 'unit':   'A',
-                                 'format': '10.6f',
-                                 'val':    None},
-            'AC Current':       {'name':   'AC Current',
-                                 'unit':   'A',
-                                 'format': '10.6f',
-                                 'val':    None},
-            '2-W Resistance':   {'name':   '2-W Resistance',
-                                 'unit':   '\u2126',
-                                 'format': '13.6f',
+            'DC Voltage':       {'name':          'DC Voltage',
+                                 'unit':          'V',
+                                 'format':        '10.6f',
+                                 'display_units': (
+                                     (1,    1e3,  '7.3f',  'mVDC'),
+                                     (None, 1,    '10.6f', 'VDC')
+                                 ),
+                                 'val':           None},
+            'AC Voltage':       {'name':         'AC Voltage',
+                                 'unit':         'V',
+                                 'display_unit': 'VAC',
+                                 'format':       '10.6f',
+                                 'display_units': (
+                                     (1,    1e3,  '7.3f',  'mVAC'),
+                                     (None, 1,    '10.6f', 'VAC')
+                                 ),
+                                 'val':          None},
+            'DC Current':       {'name':         'DC Current',
+                                 'unit':         'A',
+                                 'format':       '10.6f',
+                                 'display_units': (
+                                     (1,    1e3,  '7.3f',  'mADC'),
+                                     (None, 1,    '10.6f', 'ADC')
+                                 ),
+                                 'val':          None},
+            'AC Current':       {'name':         'AC Current',
+                                 'unit':         'A',
+                                 'format':       '10.6f',
+                                 'display_units': (
+                                     (1,    1e3,  '7.3f',  'mADC'),
+                                     (None, 1,    '10.6f', 'ADC')
+                                 ),
+                                 'val':          None},
+            '2-W Resistance':   {'name':          '2-W Resistance',
+                                 'unit':          '\u2126',
+                                 'format':        '13.6f',
+                                 'display_units': (
+                                     (1e3,  1,    '7.3f',  '\u2126'),
+                                     (1e6,  1e-3, '7.3f',  'k\u2126'),
+                                     (None, 1e-6, '7.3f',  'M\u2126')
+                                 ),
                                  'val':    None},
             '4-W Resistance':   {'name':   '4-W Resistance',
                                  'unit':   '\u2126',
                                  'format': '13.6f',
+                                 'display_units': (
+                                     (1e3,  1,    '7.3f',  '\u2126'),
+                                     (1e6,  1e-3, '7.3f',  'k\u2126'),
+                                     (None, 1e-6, '7.3f',  'M\u2126')
+                                 ),
                                  'val':    None},
-            'Capacitance':      {'name':   'Capacitance', # XXX
+            'Capacitance':      {'name':   'Capacitance',
                                  'unit':   'F',
-                                 'format': '13.6f',
+                                 'format': '14.12f',
+                                 'display_units': ( # Max 10,000.000 uF
+                                     (1e-6, 1e9, '7.3f', 'nF'),
+                                     (None, 1e6, '9.3f', '\u00B5F')
+                                 ),
                                  'val':    None},
-            'Frequency':        {'name':   'Frequency', # XXX
+            # Freq/Per range 1 Hz - 4.1 MHz (empirical) = 1 s - 243.90 nS
+            'Frequency':        {'name':   'Frequency',
                                  'unit':   'Hz',
-                                 'format': '13.6f',
+                                 'format': '13.5f',
+                                 'display_units': ( # Max 4.2 MHz
+                                     (1e3,  1,    '9.5f', 'Hz'),
+                                     (1e6,  1e-3, '9.5f', 'kHz'),
+                                     (None, 1e-6, '9.5f', 'MHz')
+                                 ),
                                  'val':    None},
-            'Period':           {'name':   'Period', # XXX
+            'Period':           {'name':   'Period',
                                  'unit':   'ms',
-                                 'format': '13.6f',
+                                 'format': '14.12f',
+                                 'display_units': (
+                                     (1e-6, 1e9,  '9.5f', 'nS'),
+                                     (1e-3, 1e6,  '9.5f', '\u00B5S'),
+                                     (1,    1e3,  '9.5f', 'mS'),
+                                     (None, 1,    '9.5f', 'S')
+                                 ),
                                  'val':    None},
             'Temperature':      {'name':   'Temperature', # XXX
                                  'unit':   'K',
@@ -568,10 +608,9 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
     @asyncSlot()
     async def _update_measurements_and_triggers(self, read_inst=True):
         """Read current values, update control panel display, return the values."""
-        if self._debug:
-            print('** MEASUREMENTS / PARAMSET')
-            for i, param_state in enumerate(self._param_state):
-                print(f'{i}: {param_state}')
+        self._inst._logger.debug('** MEASUREMENTS / PARAMSET')
+        for i, param_state in enumerate(self._param_state):
+            self._inst._logger.debug(f'{i}: {param_state}')
 
         triggers = self._cached_triggers
         measurements = self._cached_measurements
@@ -604,8 +643,16 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                     if val is None:
                         text = 'Overload'
                     else:
-                        text = ('%' + measurements[mode]['format']) % val
-                        text += ' ' + measurements[mode]['unit']
+                        disp_units = measurements[mode]['display_units']
+                        for threshold, scale, fmt, units in disp_units:
+                            if threshold is None:
+                                break
+                            if val < threshold:
+                                break
+                        else:
+                            assert False, val
+                        text = ('%' + fmt) % (val * scale)
+                        text += f' {units}'
                     self._widget_registry[paramset_num]['Measurement'].setText(text)
                 except NotConnected:
                     return
@@ -1028,7 +1075,7 @@ Connected to {self._inst.resource_name}
             try:
                 self.setEnabled(False)
                 self.repaint()
-                await self._inst.write('*RST', timeout=10000)
+                await self._inst.write('*RST')
                 self.refresh()
                 self.setEnabled(True)
             except NotConnected:
@@ -1101,13 +1148,11 @@ Connected to {self._inst.resource_name}
         if not rb.isChecked():
             return
         paramset_num, mode = rb.wid
-        if self._debug:
-            print(f'Set overall mode #{paramset_num}')
+        self._inst._logger.debug(f'Set overall mode #{paramset_num}')
         async with self._config_lock:
             self._param_state[paramset_num][':FUNCTION'] = self._mode_to_scpi(mode)
-            if self._debug:
-                print(f'  :FUNCTION="{self._mode_to_scpi(mode)}" ({mode})')
-                print(self._param_state[paramset_num])
+            self._inst._logger.debug(f'  :FUNCTION="{self._mode_to_scpi(mode)}" ({mode})')
+            self._inst._logger.debug(str(self._param_state[paramset_num]))
             self._update_widgets(paramset_num)
 
     @asyncSlotSender()
@@ -1118,8 +1163,7 @@ Connected to {self._inst.resource_name}
         if not rb.isChecked():
             return
         paramset_num, val = rb.wid
-        if self._debug:
-            print(f'Set range #{paramset_num}')
+        self._inst._logger.debug(f'Set range #{paramset_num}')
         async with self._config_lock:
             info = self._cur_mode_param_info(paramset_num)
             mode_name = info['mode_name']
@@ -1127,6 +1171,9 @@ Connected to {self._inst.resource_name}
             match mode_name:
                 case 'FREQ':
                     mode_name = 'FREQ:VOLT'
+                    val = self._range_v_disp_to_scpi_write(val)
+                case 'PER':
+                    mode_name = 'PER:VOLT'
                     val = self._range_v_disp_to_scpi_write(val)
                 case 'VOLT:DC' | 'VOLT:AC':
                     val = self._range_v_disp_to_scpi_write(val)
@@ -1137,9 +1184,12 @@ Connected to {self._inst.resource_name}
                 case 'CAP':
                     val = self._range_c_disp_to_scpi_write(val)
             self._param_state[paramset_num][f':{mode_name}:RANGE'] = val
-            if self._debug:
-                print(f'  :{mode_name}:RANGE="{val}" ({orig_val})')
-                print(self._param_state[paramset_num])
+            if mode_name == 'FREQ:VOLT': # Shared parameter
+                self._param_state[paramset_num][f':PER:VOLT:RANGE'] = val
+            elif mode_name == 'PER:VOLT':
+                self._param_state[paramset_num][f':FREQ:VOLT:RANGE'] = val
+            self._inst._logger.debug(f'  :{mode_name}:RANGE="{val}" ({orig_val})')
+            self._inst._logger.debug(str(self._param_state[paramset_num]))
             self._update_widgets(paramset_num)
 
     @asyncSlotSender()
@@ -1148,18 +1198,22 @@ Connected to {self._inst.resource_name}
         if self._disable_callbacks: # Prevent recursive calls
             return
         paramset_num = cb.wid
-        if self._debug:
-            print(f'Set range auto #{paramset_num}')
+        self._inst._logger.debug(f'Set range auto #{paramset_num}')
         async with self._config_lock:
-            val = cb.isChecked()
+            val = int(cb.isChecked())
             info = self._cur_mode_param_info(paramset_num)
             mode_name = info['mode_name']
             if mode_name == 'FREQ':
                 mode_name = 'FREQ:VOLT'
+            elif mode_name == 'PER':
+                mode_name = 'PER:VOLT'
             self._param_state[paramset_num][f':{mode_name}:RANGE:AUTO'] = val
-            if self._debug:
-                print(f'  :{mode_name}:RANGE:AUTO="{val}')
-                print(self._param_state[paramset_num])
+            if mode_name == 'FREQ:VOLT': # Shared parameter
+                self._param_state[paramset_num][f':PER:VOLT:RANGE:AUTO'] = val
+            elif mode_name == 'PER:VOLT':
+                self._param_state[paramset_num][f':FREQ:VOLT:RANGE:AUTO'] = val
+            self._inst._logger.debug(f'  :{mode_name}:RANGE:AUTO="{val}')
+            self._inst._logger.debug(str(self._param_state[paramset_num]))
             self._update_widgets(paramset_num)
 
     @asyncSlotSender()
@@ -1170,16 +1224,14 @@ Connected to {self._inst.resource_name}
         if not rb.isChecked():
             return
         paramset_num, val = rb.wid
-        if self._debug:
-            print(f'Set speed #{paramset_num}')
+        self._inst._logger.debug(f'Set speed #{paramset_num}')
         async with self._config_lock:
             info = self._cur_mode_param_info(paramset_num)
             mode_name = info['mode_name']
             scpi_val = self._speed_disp_to_scpi_write(val)
             self._param_state[paramset_num][f':{mode_name}:NPLC'] = scpi_val
-            if self._debug:
-                print(f'  :{mode_name}:NPLC="{scpi_val} ({val})')
-                print(self._param_state[paramset_num])
+            self._inst._logger.debug(f'  :{mode_name}:NPLC="{scpi_val} ({val})')
+            self._inst._logger.debug(str(self._param_state[paramset_num]))
             self._update_widgets(paramset_num)
 
     @asyncSlotSender()
@@ -1188,16 +1240,14 @@ Connected to {self._inst.resource_name}
         if self._disable_callbacks: # Prevent recursive calls
             return
         paramset_num = cb.wid
-        if self._debug:
-            print(f'Set range auto #{paramset_num}')
+        self._inst._logger.debug(f'Set DC filter #{paramset_num}')
         async with self._config_lock:
             val = cb.isChecked()
             info = self._cur_mode_param_info(paramset_num)
             mode_name = info['mode_name']
             self._param_state[paramset_num][f':{mode_name}:FILTER:STATE'] = val
-            if self._debug:
-                print(f'  :{mode_name}:FILTER:STATE="{val}"')
-                print(self._param_state[paramset_num])
+            self._inst._logger.debug(f'  :{mode_name}:FILTER:STATE="{val}"')
+            self._inst._logger.debug(str(self._param_state[paramset_num]))
             self._update_widgets(paramset_num)
 
     @asyncSlotSender()
@@ -1208,15 +1258,13 @@ Connected to {self._inst.resource_name}
         if not rb.isChecked():
             return
         paramset_num, val = rb.wid
-        if self._debug:
-            print(f'Set impedance #{paramset_num}')
+        self._inst._logger.debug(f'Set impedance #{paramset_num}')
         async with self._config_lock:
             info = self._cur_mode_param_info(paramset_num)
             mode_name = info['mode_name']
             self._param_state[paramset_num][f':{mode_name}:IMP'] = val
-            if self._debug:
-                print(f'  :{mode_name}:IMP="{val}')
-                print(self._param_state[paramset_num])
+            self._inst._logger.debug(f'  :{mode_name}:IMP="{val}')
+            self._inst._logger.debug(str(self._param_state[paramset_num]))
             self._update_widgets(paramset_num)
 
     def _on_click_rel_mode_on(self):
