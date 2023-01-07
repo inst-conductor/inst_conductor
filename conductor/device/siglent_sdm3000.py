@@ -92,6 +92,7 @@ from conductor.qasync.qasync_helper import (asyncSlotSender,
 from conductor.device.config_widget_base import (ConfigureWidgetBase,
                                                  MultiSpeedSpinBox)
 from conductor.device import (Device4882,
+                              ConnectionLost,
                               InstrumentClosed,
                               NotConnected)
 
@@ -425,7 +426,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                             elif param0.endswith(':IMP'):
                                 val = random.choice(('10M', '10G'))
                         else:
-                            val = await self._inst.query(f'{param0}?', timeout=10000)
+                            val = await self._inst.query(f'{param0}?')
                         param_type = param_spec[1]
                         if param_type[0] == '.': # Handle .3f
                             param_type = param_type[-1]
@@ -487,6 +488,9 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                 return
             except InstrumentClosed:
                 await self._actually_close()
+                return
+            except ConnectionLost:
+                await self._connection_lost()
                 return
 
     # This writes _param_state -> instrument (opposite of refresh)
@@ -623,19 +627,13 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                         not self._widget_registry[paramset_num]['Enable'].isChecked()):
                         continue
                     # Update the instrument for the current paramset
-                    try:
-                        self._last_measurement_param_state = (
-                            await self._update_instrument(paramset_num,
-                                                        self._last_measurement_param_state))
-                    except NotConnected:
-                        return
+                    self._last_measurement_param_state = (
+                        await self._update_instrument(paramset_num,
+                                                    self._last_measurement_param_state))
                     if self._inst._is_fake:
                         val = random.random()
                     else:
-                        try:
-                            val = float(await self._inst.query('READ?', timeout=10))
-                        except NotConnected:
-                            return
+                        val = float(await self._inst.query('READ?'))
                     if abs(val) == 9.9e37:
                         val = None
                     mode = self._scpi_to_mode(self._param_state[paramset_num][':FUNCTION'])
@@ -658,6 +656,9 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                     return
                 except InstrumentClosed:
                     await self._actually_close()
+                    return
+                except ConnectionLost:
+                    await self._connection_lost()
                     return
 
         # Wait until all measurements have been made and then update the display
@@ -1082,6 +1083,9 @@ Connected to {self._inst.resource_name}
                 return
             except InstrumentClosed:
                 await self._actually_close()
+                return
+            except ConnectionLost:
+                await self._connection_lost()
                 return
 
     def _menu_do_view_parameters_1(self, state):
@@ -1848,3 +1852,5 @@ Connected to {self._inst.resource_name}
 # [SENSe:]CAPacitance:NULL:VALue:AUTO
 
 # [SENSe:]CONTinuity:THReshold:VALue      0~2000 OHM
+
+# SYSTem:BEEPer:STATe {ON|1|OFF|0}

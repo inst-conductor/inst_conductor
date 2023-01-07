@@ -130,6 +130,7 @@ from conductor.device.config_widget_base import (ConfigureWidgetBase,
                                                  MultiSpeedSpinBox,
                                                  PrintableTextDialog)
 from conductor.device import (Device4882,
+                              ConnectionLost,
                               InstrumentClosed,
                               NotConnected)
 
@@ -886,6 +887,9 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         except InstrumentClosed:
             await self._actually_close()
             return
+        except ConnectionLost:
+            await self._connection_lost()
+            return
 
     # This writes _param_state -> instrument (opposite of refresh)
     async def _update_instrument(self):
@@ -940,6 +944,9 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
             return
         except InstrumentClosed:
             await self._actually_close()
+            return
+        except ConnectionLost:
+            await self._connection_lost()
             return
 
     def _initialize_measurements_and_triggers(self):
@@ -1093,6 +1100,9 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
             return
         except InstrumentClosed:
             await self._actually_close()
+            return
+        except ConnectionLost:
+            await self._connection_lost()
             return
 
         w = self._widget_registry['MeasureV']
@@ -1916,6 +1926,9 @@ Alt+T       Trigger
             except InstrumentClosed:
                 await self._actually_close()
                 return
+            except ConnectionLost:
+                await self._connection_lost()
+                return
             await asyncio.sleep(10)
             await self._refresh_no_lock()
         self._enable_interaction()
@@ -2064,6 +2077,9 @@ Alt+T       Trigger
             except InstrumentClosed:
                 await self._actually_close()
                 return
+            except ConnectionLost:
+                await self._connection_lost()
+                return
 
     @asyncSlotSender()
     async def _on_click_dynamic_mode(self, rb):
@@ -2095,6 +2111,9 @@ Alt+T       Trigger
                 return
             except InstrumentClosed:
                 await self._actually_close()
+                return
+            except ConnectionLost:
+                await self._connection_lost()
                 return
 
     @asyncSlotSender()

@@ -65,6 +65,7 @@ from conductor.device.config_widget_base import (ConfigureWidgetBase,
                                                  LongClickButton,
                                                  MultiSpeedSpinBox)
 from conductor.device import (Device4882,
+                              ConnectionLost,
                               InstrumentClosed,
                               NotConnected)
 
@@ -278,6 +279,9 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
             except InstrumentClosed:
                 await self._actually_close()
                 return
+            except ConnectionLost:
+                await self._connection_lost()
+                return
 
     # This writes internal parameter state -> instrument (opposite of refresh)
     async def update_instrument(self):
@@ -310,6 +314,9 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                 return
             except InstrumentClosed:
                 await self._actually_close()
+                return
+            except ConnectionLost:
+                await self._connection_lost()
                 return
 
     def _initialize_measurements_and_triggers(self):
@@ -372,11 +379,8 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
 
         try:
             async with self._config_lock:
-                try:
-                    status = int((await self._inst.query('SYST:STATUS?')).replace('0x', ''),
-                                base=16)
-                except NotConnected:
-                    return
+                status = int((await self._inst.query('SYST:STATUS?')).replace('0x', ''),
+                            base=16)
                 self._psu_cc[0] = bool(status & 0x01)
                 self._psu_cc[1] = bool(status & 0x02)
                 self._psu_on_off[0] = bool(status & 0x10)
@@ -402,10 +406,7 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                     w.setText('---  V')
                 else:
                     async with self._config_lock:
-                        try:
-                            voltage = await self._inst.measure_voltage(ch+1)
-                        except NotConnected:
-                            return
+                        voltage = await self._inst.measure_voltage(ch+1)
                         w.setText(f'{voltage:6.3f} V')
                 measurements[f'Voltage{ch+1}']['val'] = voltage
 
@@ -415,10 +416,7 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                     w.setText('---  A')
                 else:
                     async with self._config_lock:
-                        try:
-                            current = await self._inst.measure_current(ch+1)
-                        except NotConnected:
-                            return
+                        current = await self._inst.measure_current(ch+1)
                         w.setText(f'{current:5.3f} A')
                 measurements[f'Current{ch+1}']['val'] = current
 
@@ -428,16 +426,16 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                     w.setText('---  W')
                 else:
                     async with self._config_lock:
-                        try:
-                            power = await self._inst.measure_power(ch+1)
-                        except NotConnected:
-                            return
+                        power = await self._inst.measure_power(ch+1)
                         w.setText(f'{power:6.3f} W')
                 measurements[f'Power{ch+1}']['val'] = power
         except NotConnected:
             return
         except InstrumentClosed:
             await self._actually_close()
+            return
+        except ConnectionLost:
+            await self._connection_lost()
             return
 
         # Wait until all measurements have been made and then update the display
@@ -897,102 +895,138 @@ Alt+N      All channels ON
         fn = fn[0]
         with open(fn, 'r') as fp:
             cfg = json.load(fp)
-        async with self._config_lock:
-            # Be safe by turning off the outputs and timer before changing values
-            self._timer_mode_running[0] = False
-            self._timer_mode_running[1] = False
-            match cfg['OUTPUT:TRACK']:
-                case 0:
-                    self._psu_mode = 'I'
-                    await self._inst.write('OUTPUT:TRACK 0')
-                    await self._inst.write('TIMER CH1,OFF')
-                    await self._inst.write('TIMER CH2,OFF')
-                case 1:
-                    self._psu_mode = 'S'
-                    await self._inst.write('OUTPUT:TRACK 1')
-                case 2:
-                    self._psu_mode = 'P'
-                    await self._inst.write('OUTPUT:TRACK 2')
-                case _:
-                    assert False, cfg['OUTPUT:TRACK']
-            await self._update_output_state(0, False)
-            max_ch = 2
-            if self._psu_mode == 'I':
+        try:
+            async with self._config_lock:
+                # Be safe by turning off the outputs and timer before changing values
+                self._timer_mode_running[0] = False
+                self._timer_mode_running[1] = False
+                match cfg['OUTPUT:TRACK']:
+                    case 0:
+                        self._psu_mode = 'I'
+                        await self._inst.write('OUTPUT:TRACK 0')
+                        await self._inst.write('TIMER CH1,OFF')
+                        await self._inst.write('TIMER CH2,OFF')
+                    case 1:
+                        self._psu_mode = 'S'
+                        await self._inst.write('OUTPUT:TRACK 1')
+                    case 2:
+                        self._psu_mode = 'P'
+                        await self._inst.write('OUTPUT:TRACK 2')
+                    case _:
+                        assert False, cfg['OUTPUT:TRACK']
+                await self._update_output_state(0, False)
                 max_ch = 2
-                await self._update_output_state(1, False)
-            else:
-                max_ch = 1
-            for ch in range(max_ch):
-                key = f'CH{ch+1}:VOLT'
-                volt = cfg[key]
-                self._psu_voltage[ch] = float(volt)
-                await self._inst.write(f'{key} {volt}')
-                key = f'CH{ch+1}:CURR'
-                curr = cfg[key]
-                self._psu_current[ch] = float(curr)
-                await self._inst.write(f'{key} {curr}')
-                for num in range(5):
-                    key = f'TIMER:SET CH{ch+1},{num+1}'
-                    val = cfg[key]
-                    await self._inst.write(f'{key},{val}')
-                    v, c, t = [float(x) for x in val.split(',')]
-                    self._psu_timer_params[ch][num] = [v, c, t]
-                for num in range(len(self._presets[ch])):
-                    key = f'CH{ch+1}:PRESET {num+1}'
-                    val = cfg[key]
-                    v, c = [float(x) for x in val.split(',')]
-                    self._presets[ch][num] = [v, c]
-                for mm in ('Min', 'Max'):
-                    for cv in ('V', 'I'):
-                        key1 = f'{mm}{ch}{cv}'
-                        key2 = f'{mm}{ch+1}{cv}'
-                        self._widget_registry[key1].setValue(float(cfg[key2]))
-            await self._update_widgets()
+                if self._psu_mode == 'I':
+                    max_ch = 2
+                    await self._update_output_state(1, False)
+                else:
+                    max_ch = 1
+                for ch in range(max_ch):
+                    key = f'CH{ch+1}:VOLT'
+                    volt = cfg[key]
+                    self._psu_voltage[ch] = float(volt)
+                    await self._inst.write(f'{key} {volt}')
+                    key = f'CH{ch+1}:CURR'
+                    curr = cfg[key]
+                    self._psu_current[ch] = float(curr)
+                    await self._inst.write(f'{key} {curr}')
+                    for num in range(5):
+                        key = f'TIMER:SET CH{ch+1},{num+1}'
+                        val = cfg[key]
+                        await self._inst.write(f'{key},{val}')
+                        v, c, t = [float(x) for x in val.split(',')]
+                        self._psu_timer_params[ch][num] = [v, c, t]
+                    for num in range(len(self._presets[ch])):
+                        key = f'CH{ch+1}:PRESET {num+1}'
+                        val = cfg[key]
+                        v, c = [float(x) for x in val.split(',')]
+                        self._presets[ch][num] = [v, c]
+                    for mm in ('Min', 'Max'):
+                        for cv in ('V', 'I'):
+                            key1 = f'{mm}{ch}{cv}'
+                            key2 = f'{mm}{ch+1}{cv}'
+                            self._widget_registry[key1].setValue(float(cfg[key2]))
+                await self._update_widgets()
+        except NotConnected:
+            return
+        except InstrumentClosed:
+            await self._actually_close()
+            return
+        except ConnectionLost:
+            await self._connection_lost()
+            return
 
     @asyncSlot()
     async def _menu_do_device_independent(self):
         """Handle Device Independent menu."""
-        async with self._config_lock:
-            self._widget_registry['IndependentAction'].setChecked(True)
-            self._widget_registry['SeriesAction'].setChecked(False)
-            self._widget_registry['ParallelAction'].setChecked(False)
-            self._psu_mode = 'I'
-            self._psu_on_off[0] = False
-            self._psu_on_off[1] = False
-            self._timer_mode_running[0] = False
-            self._timer_mode_running[1] = False
-            await self._inst.write('OUTPUT:TRACK 0') # Turns off the outputs
-            await self._update_widgets()
+        try:
+            async with self._config_lock:
+                self._widget_registry['IndependentAction'].setChecked(True)
+                self._widget_registry['SeriesAction'].setChecked(False)
+                self._widget_registry['ParallelAction'].setChecked(False)
+                self._psu_mode = 'I'
+                self._psu_on_off[0] = False
+                self._psu_on_off[1] = False
+                self._timer_mode_running[0] = False
+                self._timer_mode_running[1] = False
+                await self._inst.write('OUTPUT:TRACK 0') # Turns off the outputs
+                await self._update_widgets()
+        except NotConnected:
+            return
+        except InstrumentClosed:
+            await self._actually_close()
+            return
+        except ConnectionLost:
+            await self._connection_lost()
+            return
 
     @asyncSlot()
     async def _menu_do_device_series(self):
         """Handle Device Series menu."""
-        async with self._config_lock:
-            self._widget_registry['IndependentAction'].setChecked(False)
-            self._widget_registry['SeriesAction'].setChecked(True)
-            self._widget_registry['ParallelAction'].setChecked(False)
-            self._psu_mode = 'S'
-            self._psu_on_off[0] = False
-            self._psu_on_off[1] = False
-            self._timer_mode_running[0] = False
-            self._timer_mode_running[1] = False
-            await self._inst.write('OUTPUT:TRACK 1') # Turns off the outputs
-            await self._update_widgets()
+        try:
+            async with self._config_lock:
+                self._widget_registry['IndependentAction'].setChecked(False)
+                self._widget_registry['SeriesAction'].setChecked(True)
+                self._widget_registry['ParallelAction'].setChecked(False)
+                self._psu_mode = 'S'
+                self._psu_on_off[0] = False
+                self._psu_on_off[1] = False
+                self._timer_mode_running[0] = False
+                self._timer_mode_running[1] = False
+                await self._inst.write('OUTPUT:TRACK 1') # Turns off the outputs
+                await self._update_widgets()
+        except NotConnected:
+            return
+        except InstrumentClosed:
+            await self._actually_close()
+            return
+        except ConnectionLost:
+            await self._connection_lost()
+            return
 
     @asyncSlot()
     async def _menu_do_device_parallel(self):
         """Handle Device Parallel menu."""
-        async with self._config_lock:
-            self._widget_registry['IndependentAction'].setChecked(False)
-            self._widget_registry['SeriesAction'].setChecked(False)
-            self._widget_registry['ParallelAction'].setChecked(True)
-            self._psu_mode = 'P'
-            self._psu_on_off[0] = False
-            self._psu_on_off[1] = False
-            self._timer_mode_running[0] = False
-            self._timer_mode_running[1] = False
-            await self._inst.write('OUTPUT:TRACK 2') # Turns off the outputs
-            await self._update_widgets()
+        try:
+            async with self._config_lock:
+                self._widget_registry['IndependentAction'].setChecked(False)
+                self._widget_registry['SeriesAction'].setChecked(False)
+                self._widget_registry['ParallelAction'].setChecked(True)
+                self._psu_mode = 'P'
+                self._psu_on_off[0] = False
+                self._psu_on_off[1] = False
+                self._timer_mode_running[0] = False
+                self._timer_mode_running[1] = False
+                await self._inst.write('OUTPUT:TRACK 2') # Turns off the outputs
+                await self._update_widgets()
+        except NotConnected:
+            return
+        except InstrumentClosed:
+            await self._actually_close()
+            return
+        except ConnectionLost:
+            await self._connection_lost()
+            return
 
     def _menu_do_view_minmax_limits(self, state):
         """Toggle visibility of the min/max limit spinboxes."""
@@ -1075,87 +1109,114 @@ Alt+N      All channels ON
         """Handle clicking on any input value edit box."""
         if self._disable_callbacks: # Prevent recursive calls
             return
-        async with self._config_lock:
-            wid = input.wid
-            wid_type = wid[0]
-            ch = wid[-1]
-            val = input.value()
-            match wid_type:
-                case 'Min':
-                    vi = wid[1]
-                    sp = self._widget_registry[f'SetPoint{ch}{vi}']
-                    sp.setMinimum(val)
-                    self._widget_registry[f'Max{ch}{vi}'].setMinimum(val)
-                    self._update_timer_minmax(ch)
-                    # Fall through into SetPoint to catch this change affecting the
-                    # SetPoint spinner's value
-                    wid_type = 'SetPoint'
-                    val = sp.value()
-                case 'Max':
-                    vi = wid[1]
-                    sp = self._widget_registry[f'SetPoint{ch}{vi}']
-                    sp.setMaximum(val)
-                    self._widget_registry[f'Min{ch}{vi}'].setMaximum(val)
-                    self._update_timer_minmax(ch)
-                    # Fall through into SetPoint to catch this change affecting the
-                    # SetPoint spinner's value
-                    wid_type = 'SetPoint'
-                    val = sp.value()
-                case 'SetPoint':
-                    pass  # Fall through
-                case _:
-                    assert False, wid_type
-            if wid_type == 'SetPoint':
-                match wid[1]:
-                    case 'V':
-                        if self._psu_voltage[ch] != val:
-                            await self._inst.write(f'CH{ch+1}:VOLT {val:.3f}')
-                            self._psu_voltage[ch] = val
-                            if self._psu_mode != 'I':
-                                assert ch == 0
-                                self._psu_voltage[1] = val
-                    case 'I':
-                        if self._psu_current[ch] != val:
-                            await self._inst.write(f'CH{ch+1}:CURR {val:.3f}')
-                            self._psu_current[ch] = val
-                            if self._psu_mode != 'I':
-                                assert ch == 0
-                                self._psu_current[1] = val
+        try:
+            async with self._config_lock:
+                wid = input.wid
+                wid_type = wid[0]
+                ch = wid[-1]
+                val = input.value()
+                match wid_type:
+                    case 'Min':
+                        vi = wid[1]
+                        sp = self._widget_registry[f'SetPoint{ch}{vi}']
+                        sp.setMinimum(val)
+                        self._widget_registry[f'Max{ch}{vi}'].setMinimum(val)
+                        self._update_timer_minmax(ch)
+                        # Fall through into SetPoint to catch this change affecting the
+                        # SetPoint spinner's value
+                        wid_type = 'SetPoint'
+                        val = sp.value()
+                    case 'Max':
+                        vi = wid[1]
+                        sp = self._widget_registry[f'SetPoint{ch}{vi}']
+                        sp.setMaximum(val)
+                        self._widget_registry[f'Min{ch}{vi}'].setMaximum(val)
+                        self._update_timer_minmax(ch)
+                        # Fall through into SetPoint to catch this change affecting the
+                        # SetPoint spinner's value
+                        wid_type = 'SetPoint'
+                        val = sp.value()
+                    case 'SetPoint':
+                        pass  # Fall through
                     case _:
-                        assert False
+                        assert False, wid_type
+                if wid_type == 'SetPoint':
+                    match wid[1]:
+                        case 'V':
+                            if self._psu_voltage[ch] != val:
+                                await self._inst.write(f'CH{ch+1}:VOLT {val:.3f}')
+                                self._psu_voltage[ch] = val
+                                if self._psu_mode != 'I':
+                                    assert ch == 0
+                                    self._psu_voltage[1] = val
+                        case 'I':
+                            if self._psu_current[ch] != val:
+                                await self._inst.write(f'CH{ch+1}:CURR {val:.3f}')
+                                self._psu_current[ch] = val
+                                if self._psu_mode != 'I':
+                                    assert ch == 0
+                                    self._psu_current[1] = val
+                        case _:
+                            assert False
 
-            await self._update_widgets()
+                await self._update_widgets()
+        except NotConnected:
+            return
+        except InstrumentClosed:
+            await self._actually_close()
+            return
+        except ConnectionLost:
+            await self._connection_lost()
+            return
 
     @asyncSlot()
     async def _update_timer_minmax(self, ch):
         """Update the timer values based on the current min/max settings."""
-        async with self._config_lock:
-            min_v = self._widget_registry[f'Min{ch}V'].value()
-            max_v = self._widget_registry[f'Max{ch}V'].value()
-            min_i = self._widget_registry[f'Min{ch}I'].value()
-            max_i = self._widget_registry[f'Max{ch}I'].value()
-            for step_num in range(self._timer_mode_num_steps):
-                v, i, t = self._psu_timer_params[ch][step_num]
-                v1 = max(min_v, min(max_v, v))
-                i1 = max(min_i, min(max_i, i))
-                if v != v1 or i != i1:
-                    self._psu_timer_params[ch][step_num] = [v1, i1, t]
-                    await self._inst.write(
-                        f'TIMER:SET CH{ch+1},{step_num+1},{v1:.3f},{i1:.3f},{t:.3f}')
+        try:
+            async with self._config_lock:
+                min_v = self._widget_registry[f'Min{ch}V'].value()
+                max_v = self._widget_registry[f'Max{ch}V'].value()
+                min_i = self._widget_registry[f'Min{ch}I'].value()
+                max_i = self._widget_registry[f'Max{ch}I'].value()
+                for step_num in range(self._timer_mode_num_steps):
+                    v, i, t = self._psu_timer_params[ch][step_num]
+                    v1 = max(min_v, min(max_v, v))
+                    i1 = max(min_i, min(max_i, i))
+                    if v != v1 or i != i1:
+                        self._psu_timer_params[ch][step_num] = [v1, i1, t]
+                        await self._inst.write(
+                            f'TIMER:SET CH{ch+1},{step_num+1},{v1:.3f},{i1:.3f},{t:.3f}')
+        except NotConnected:
+            return
+        except InstrumentClosed:
+            await self._actually_close()
+            return
+        except ConnectionLost:
+            await self._connection_lost()
+            return
 
     @asyncSlot()
     async def _on_preset_clicked(self, button):
-        async with self._config_lock:
-            ch, preset_num = button.wid
-            volt, curr = self._presets[ch][preset_num]
-            self._psu_voltage[ch] = volt
-            self._psu_current[ch] = curr
-            # This will take care of min/max, which might change the values
-            await self._update_widgets()
-            volt = self._widget_registry[f'SetPoint{ch}V'].value()
-            curr = self._widget_registry[f'SetPoint{ch}I'].value()
-            await self._inst.write(f'CH{ch+1}:VOLT {volt:.3f}')
-            await self._inst.write(f'CH{ch+1}:CURR {curr:.3f}')
+        try:
+            async with self._config_lock:
+                ch, preset_num = button.wid
+                volt, curr = self._presets[ch][preset_num]
+                self._psu_voltage[ch] = volt
+                self._psu_current[ch] = curr
+                # This will take care of min/max, which might change the values
+                await self._update_widgets()
+                volt = self._widget_registry[f'SetPoint{ch}V'].value()
+                curr = self._widget_registry[f'SetPoint{ch}I'].value()
+                await self._inst.write(f'CH{ch+1}:VOLT {volt:.3f}')
+                await self._inst.write(f'CH{ch+1}:CURR {curr:.3f}')
+        except NotConnected:
+            return
+        except InstrumentClosed:
+            await self._actually_close()
+            return
+        except ConnectionLost:
+            await self._connection_lost()
+            return
 
     @asyncSlot()
     async def _on_preset_long_click(self, button):
@@ -1166,19 +1227,28 @@ Alt+N      All channels ON
     @asyncSlot()
     async def _on_timer_table_change(self, ch, row, column, val):
         """Handle change to any Timer Mode table value."""
-        async with self._config_lock:
-            match column:
-                case 0:
-                    self._psu_timer_params[ch][row][0] = val
-                case 1:
-                    self._psu_timer_params[ch][row][1] = val
-                case 2:
-                    self._psu_timer_params[ch][row][2] = val
-            volt, curr, time = self._psu_timer_params[ch][row]
-            await self._inst.write(
-                f'TIMER:SET CH{ch+1},{row+1},{volt:.3f},{curr:.3f},{time:.3f}')
-            self._update_timer_table_graphs(update_table=False)
-            self._update_timer_on_off_buttons()
+        try:
+            async with self._config_lock:
+                match column:
+                    case 0:
+                        self._psu_timer_params[ch][row][0] = val
+                    case 1:
+                        self._psu_timer_params[ch][row][1] = val
+                    case 2:
+                        self._psu_timer_params[ch][row][2] = val
+                volt, curr, time = self._psu_timer_params[ch][row]
+                await self._inst.write(
+                    f'TIMER:SET CH{ch+1},{row+1},{volt:.3f},{curr:.3f},{time:.3f}')
+                self._update_timer_table_graphs(update_table=False)
+                self._update_timer_on_off_buttons()
+        except NotConnected:
+            return
+        except InstrumentClosed:
+            await self._actually_close()
+            return
+        except ConnectionLost:
+            await self._connection_lost()
+            return
 
     def _on_timer_plot_resize(self):
         """Handle resize event for timer plot."""
@@ -1317,20 +1387,38 @@ Alt+N      All channels ON
 
         Does not lock.
         """
-        self._psu_on_off[ch] = state
-        val = 'ON' if state else 'OFF'
-        await self._inst.write(f'OUTPUT CH{ch+1},{val}')
-        self._update_output_on_off_buttons()
+        try:
+            self._psu_on_off[ch] = state
+            val = 'ON' if state else 'OFF'
+            await self._inst.write(f'OUTPUT CH{ch+1},{val}')
+            self._update_output_on_off_buttons()
+        except NotConnected:
+            return
+        except InstrumentClosed:
+            await self._actually_close()
+            return
+        except ConnectionLost:
+            await self._connection_lost()
+            return
 
     async def _update_timer_state(self, ch, state):
         """Update the instrument's time state.
 
         Does not lock.
         """
-        self._timer_mode_running[ch] = state
-        val = 'ON' if state else 'OFF'
-        await self._inst.write(f'TIMER CH{ch+1},{val}')
-        await self._update_widgets()
+        try:
+            self._timer_mode_running[ch] = state
+            val = 'ON' if state else 'OFF'
+            await self._inst.write(f'TIMER CH{ch+1},{val}')
+            await self._update_widgets()
+        except NotConnected:
+            return
+        except InstrumentClosed:
+            await self._actually_close()
+            return
+        except ConnectionLost:
+            await self._connection_lost()
+            return
 
     async def _update_widgets(self):
         """Update all widgets with the current internal state.

@@ -213,6 +213,14 @@ class ConfigureWidgetBase(QWidget):
         # Notify the main widget so that all of the UI lists and whatnot can be updated.
         await self._main_window.device_window_closed(self._inst)
 
+    async def _connection_lost(self):
+        """Announce that we lost the connection and close the window."""
+        self.setEnabled(False)
+        self.close()
+        QAsyncMessageBox.critical(self, 'Connection Lost',
+                                  f'Lost connection to {self._inst.long_name}')
+        await self._actually_close()
+
 
 class PrintableTextDialog(QDialog):
     """Text-containing Dialog that can be saved and printed."""

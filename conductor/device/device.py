@@ -168,35 +168,27 @@ class Device(object):
 
     async def disconnect(self):
         """Close the connection to the device."""
-        if not self._connected:
-            raise NotConnected
         if not self._is_fake:
             try:
                 self._writer.close()
                 await self._writer.wait_closed()
-            except ConnectionResetError: # OK if already closed
+            except (ConnectionResetError, OSError): # OK if already closed
                 pass
         self._connected = False
         self._logger.info(f'{self._long_name} - Disconnected')
 
-    async def query(self, s, timeout=None):
+    async def query(self, s):
         """VISA query, write then read."""
         if not self._connected:
             raise NotConnected
         if self._is_fake:
             ret = 'QUERY_RESULT'
         else:
-            # try:
             async with self._io_lock:
                 # Write and Read have to be adjacent to each other
                 await self.write_no_lock(s)
                 ret = await self.read_no_lock()
             ret = ret.strip(' \t\r\n')
-            # except pyvisa.errors.VisaIOError:
-            #     self.disconnect()
-            #     if self._debug:
-            #         print(f'query "{s}" resulted in disconnect')
-            #     raise ContactLostError
         self._logger.debug(f'{self._long_name} - query "{s}" returned "{ret}"')
         return ret
 
@@ -213,14 +205,14 @@ class Device(object):
         else:
             try:
                 ret = await self._reader.readline()
-            except ConnectionResetError:
+            except (ConnectionResetError, OSError):
                 self._logger.debug(f'{self._long_name} - read connection lost')
-                await self.disconnect()
+                self._connected = False
                 raise ConnectionLost
-            ret = ret.decode().strip(' \t\r\n')
             if self._ready_to_close:
                 self._logger.debug(f'{self._long_name} - read while ready to close')
                 raise InstrumentClosed
+            ret = ret.decode().strip(' \t\r\n')
         return ret
 
     async def read(self):
@@ -244,9 +236,9 @@ class Device(object):
             async with self._io_lock:
                 try:
                     ret = await self._reader.readline()
-                except ConnectionResetError:
+                except (ConnectionResetError, OSError):
                     self._logger.debug(f'{self._long_name} - read_raw connection lost')
-                    await self.disconnect()
+                    self._connected = False
                     raise ConnectionLost
             if self._ready_to_close:
                 self._logger.debug(f'{self._long_name} - read_raw while ready to close')
@@ -268,9 +260,9 @@ class Device(object):
         try:
             self._writer.write((s+'\n').encode())
             await self._writer.drain()
-        except ConnectionResetError:
+        except (ConnectionResetError, OSError):
             self._logger.debug(f'{self._long_name} - write connection lost')
-            await self.disconnect()
+            self._connected = False
             raise ConnectionLost
         if self._ready_to_close:
             self._logger.debug(f'{self._long_name} - write while ready to close')
@@ -281,13 +273,8 @@ class Device(object):
         self._logger.debug(f'{self._long_name} - write "{s}"')
         if self._is_fake:
             return
-        try:
-            async with self._io_lock:
-                await self.write_no_lock(s)
-        except ConnectionResetError:
-            self._logger.debug(f'{self._long_name} - write connection lost')
-            await self.disconnect()
-            raise ConnectionLost
+        async with self._io_lock:
+            await self.write_no_lock(s)
 
     async def write_raw(self, s):
         """VISA write, no termination characters."""
@@ -303,9 +290,9 @@ class Device(object):
         try:
             self._writer.write(s.encode())
             await self._writer.drain()
-        except ConnectionResetError:
+        except (ConnectionResetError, OSError):
             self._logger.debug(f'{self._long_name} - write_raw connection lost')
-            await self.disconnect()
+            self._connected = False
             raise ConnectionLost
         if self._ready_to_close:
             self._logger.debug(f'{self._long_name} - write_raw while ready to close')

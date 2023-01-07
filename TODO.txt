@@ -1,10 +1,13 @@
 ** General **
 
+- Check to make sure everything still works when windows are minimized
+
 - Bugs:
   - Alt+Mouse Wheel does not move the 0.001 digit like it should (known Qt bug)
     Perhaps related to: https://bugreports.qt.io/browse/QTBUG-30948
 
 - Enhancements:
+  - Command line option to open widgets using simple measurements enabled only
   - Convert everything to global style sheets
   - Mouse wheel or up/down arrow should move digit at cursor position like a real instrument
   - Write help for each instrument
@@ -22,7 +25,8 @@
   - Virtual instruments that do math, generate curves, etc
   - Implement SDG
   - Implement SDS
-
+  - Support USB connection
+  - Automatic discovery
 
 ** Acquisition **
 
@@ -89,6 +93,8 @@
   - Indicate edit of V/A is in progress and not applied to instrument yet (background or
     font)
   - Option to allow live update while changing V/A
+  - Option to allow live update from the instrument (only update text input box when
+    something actually changes to not overwrite editing in progress)
   - Option to require Enter to change V/A, not just losing focus
   - Show status message when timer is on if timer display is not shown
   - Channel 3 indicator and control if possible
@@ -105,6 +111,7 @@
 ** SDM **
 
 - Bugs:
+  * Not connecting instrument disconnect
   * Not all instrument modes are implemented
   * Relative measurements not implemented
   * Setting auto range should grey out range radio buttons
@@ -117,6 +124,7 @@
   - Change colors to the side of each set of parameters to they are accessible to
     color-blind people
   - Handle 3045X, 3055, and 3065X with different numbers of digits
+  - Implement scan card
 
 ** SDS **
 
