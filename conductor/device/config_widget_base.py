@@ -53,13 +53,13 @@ class ConfigureWidgetBase(QWidget):
     """The base class for all instrument configuration widgets.
 
     Must call refresh after instance creation."""
-    def __init__(self, main_window, instrument):
+    def __init__(self, main_window, instrument, measurements_only=False):
         super().__init__()
         self._style_env = main_window._style_env
         self._main_window = main_window
         self._inst = instrument
         self._statusbar = None
-        self._init_widgets()
+        self._init_widgets(measurements_only=measurements_only)
         self.show() # Do this here so all the widgets get their sizes before being hidden
 
     ### The following functions must be implemented by all configuration widgets.

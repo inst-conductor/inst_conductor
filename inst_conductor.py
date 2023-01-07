@@ -50,7 +50,8 @@ async def main():
         getattr(app, "aboutToQuit").connect(
             functools.partial(close_future, future, loop))
 
-    main_window = MainWindow(app, arguments.config_file)
+    main_window = MainWindow(app, arguments.config_file,
+                             measurements_only=arguments.measurements_only)
     main_window.show()
 
     if len(sys.argv) > 1:
@@ -72,6 +73,10 @@ if __name__ == "__main__":
                                        'inst_conductor.ini')
     parser = argparse.ArgumentParser(prog='inst_conductor')
     parser.add_argument('args', nargs=argparse.REMAINDER)
+    parser.add_argument('--measurements-only', action='store_true', default=False,
+                        help="""
+When instruments are first opened, only show the measurements and not the
+configuration options""")
     log.add_arguments(parser, default_logfile, default_config_file)
 
     arguments = parser.parse_args(sys.argv[1:])

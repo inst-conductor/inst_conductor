@@ -68,7 +68,7 @@ class MainWindow(QWidget):
 
     ResourceAttributes = namedtuple('ResourceAttributes',
                                     ('name', 'inst', 'config_widget'))
-    def __init__(self, app, config_file):
+    def __init__(self, app, config_file, measurements_only=False):
         super().__init__()
         self.setWindowTitle('Instrument Conductor')
 
@@ -83,6 +83,8 @@ class MainWindow(QWidget):
         self.app = app
 
         self._logger = logging.getLogger('ic')
+
+        self._measurements_only = measurements_only
 
         # Tuple of ResourceAttributes and associated lock
         self._resources_lock = asyncio.Lock()
@@ -618,7 +620,8 @@ Copyright 2023, Robert S. French"""
         config_widget = None
         # inst.set_debug(True)
         await inst.connect()
-        config_widget = inst.configure_widget(self)
+        config_widget = inst.configure_widget(self,
+                                              measurements_only=self._measurements_only)
         config_widget.show()
         await config_widget.refresh()
         if not config_widget.connected:

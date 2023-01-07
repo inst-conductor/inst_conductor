@@ -193,9 +193,12 @@ class InstrumentSiglentSDL1000(Device4882):
         await self.write(':SYST:REMOTE:STATE 0')
         await super().disconnect(*args, **kwargs)
 
-    def configure_widget(self, main_window):
+    def configure_widget(self, main_window, measurements_only=False):
         """Return the configuration widget for this instrument."""
-        return InstrumentSiglentSDL1000ConfigureWidget(main_window, self)
+        return InstrumentSiglentSDL1000ConfigureWidget(
+            main_window,
+            self,
+            measurements_only=measurements_only)
 
     async def set_input_state(self, val):
         """Turn the load on or off."""
@@ -1197,7 +1200,7 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
     ### Setup Window Layout
     ############################################################################
 
-    def _init_widgets(self):
+    def _init_widgets(self, measurements_only=False):
         """Set up all the toplevel widgets."""
         toplevel_widget = self._toplevel_widget()
 
@@ -1213,7 +1216,7 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
 
         action = QAction('&Parameters', self, checkable=True)
         action.setShortcut(QKeySequence('Ctrl+1'))
-        action.setChecked(True)
+        action.setChecked(not measurements_only)
         action.triggered.connect(self._menu_do_view_parameters)
         self._menubar_view.addAction(action)
         action = QAction('&Global Parameters', self, checkable=True)
@@ -1223,7 +1226,7 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         self._menubar_view.addAction(action)
         action = QAction('&Load and Trigger', self, checkable=True)
         action.setShortcut(QKeySequence('Ctrl+3'))
-        action.setChecked(True)
+        action.setChecked(not measurements_only)
         action.triggered.connect(self._menu_do_view_load_trigger)
         self._menubar_view.addAction(action)
         action = QAction('&Measurements', self, checkable=True)
@@ -1251,6 +1254,8 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         w.setLayout(row_layout)
         main_vert_layout.addWidget(w)
         self._widget_registry['ParametersRow'] = w
+        if measurements_only:
+            w.hide()
 
         ### ROW 1, COLUMN 1 ###
 
@@ -1495,6 +1500,8 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         w.setLayout(row_layout)
         main_vert_layout.addWidget(w)
         self._widget_registry['ListRow'] = w
+        if measurements_only:
+            w.hide()
 
         table = QTableView(alternatingRowColors=True)
         table.setModel(ListTableModel(self._on_list_table_change))
@@ -1533,6 +1540,8 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
         w.setLayout(row_layout)
         main_vert_layout.addWidget(w)
         self._widget_registry['TriggerRow'] = w
+        if measurements_only:
+            w.hide()
 
         ###### ROW 5, COLUMN 1 - SHORT ######
 

@@ -161,9 +161,12 @@ class InstrumentSiglentSDM3000(Device4882):
         self._ready_to_close = False
         await super().disconnect(*args, **kwargs)
 
-    def configure_widget(self, main_window):
+    def configure_widget(self, main_window, measurements_only):
         """Return the configuration widget for this instrument."""
-        return InstrumentSiglentSDM3000ConfigureWidget(main_window, self)
+        return InstrumentSiglentSDM3000ConfigureWidget(
+            main_window,
+            self,
+            measurements_only=measurements_only)
 
 
 ##########################################################################################
@@ -680,7 +683,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
     ### Setup Window Layout
     ############################################################################
 
-    def _init_widgets(self):
+    def _init_widgets(self, measurements_only=False):
         """Set up all the toplevel widgets."""
         toplevel_widget = self._toplevel_widget()
 
@@ -692,7 +695,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
         # assert self._NUM_PARAMSET == 4 XXX
         action = QAction('&Parameters #1', self, checkable=True)
         action.setShortcut(QKeySequence('Ctrl+1'))
-        action.setChecked(True)
+        action.setChecked(not measurements_only)
         action.triggered.connect(self._menu_do_view_parameters_1)
         self._menubar_view.addAction(action)
 
@@ -768,7 +771,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
             vert_layout = QVBoxLayout()
             ps_row_layout.addLayout(vert_layout)
 
-            if paramset_num > 1:
+            if paramset_num > 1 or measurements_only:
                 # Start out with only the first paramset visible
                 w.hide()
 
@@ -917,58 +920,58 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
 
             layouts.addStretch()
 
-            ### ROWS 1-4, COLUMN 3 ###
+            # ### ROWS 1-4, COLUMN 3 ###
 
-            layouts = QVBoxLayout()
-            layouts.setSpacing(0)
-            row_layout.addLayout(layouts)
+            # layouts = QVBoxLayout()
+            # layouts.setSpacing(0)
+            # row_layout.addLayout(layouts)
 
-            # Relative measurement
-            frame = QGroupBox(f'Relative To')
-            self._widget_registry[paramset_num]['FrameRelative'] = frame
-            layouts.addWidget(frame)
-            layoutv2 = QVBoxLayout(frame)
+            # # Relative measurement
+            # frame = QGroupBox(f'Relative To')
+            # self._widget_registry[paramset_num]['FrameRelative'] = frame
+            # layouts.addWidget(frame)
+            # layoutv2 = QVBoxLayout(frame)
 
-            # Relative measurement mode on
-            w = QCheckBox('Relative Mode On')
-            w.wid = paramset_num
-            layoutv2.addWidget(w)
-            w.clicked.connect(self._on_click_rel_mode_on)
-            self._widget_registry[paramset_num]['RelModeOn'] = w
+            # # Relative measurement mode on
+            # w = QCheckBox('Relative Mode On')
+            # w.wid = paramset_num
+            # layoutv2.addWidget(w)
+            # w.clicked.connect(self._on_click_rel_mode_on)
+            # self._widget_registry[paramset_num]['RelModeOn'] = w
 
-            layouth2 = QHBoxLayout()
-            label = QLabel('Relative Value:')
-            layouth2.addWidget(label)
-            input = MultiSpeedSpinBox(1.)
-            input.wid = paramset_num
-            input.setAlignment(Qt.AlignmentFlag.AlignRight)
-            input.setDecimals(3)
-            input.setAccelerated(True)
-            input.editingFinished.connect(self._on_value_change_rel_mode)
-            layouth2.addWidget(input)
-            label.sizePolicy().setRetainSizeWhenHidden(True)
-            input.sizePolicy().setRetainSizeWhenHidden(True)
-            layoutv2.addLayout(layouth2)
-            self._widget_registry[paramset_num]['RelModeVal'] = input
+            # layouth2 = QHBoxLayout()
+            # label = QLabel('Relative Value:')
+            # layouth2.addWidget(label)
+            # input = MultiSpeedSpinBox(1.)
+            # input.wid = paramset_num
+            # input.setAlignment(Qt.AlignmentFlag.AlignRight)
+            # input.setDecimals(3)
+            # input.setAccelerated(True)
+            # input.editingFinished.connect(self._on_value_change_rel_mode)
+            # layouth2.addWidget(input)
+            # label.sizePolicy().setRetainSizeWhenHidden(True)
+            # input.sizePolicy().setRetainSizeWhenHidden(True)
+            # layoutv2.addLayout(layouth2)
+            # self._widget_registry[paramset_num]['RelModeVal'] = input
 
-            # Relative value source
-            layouth2 = QHBoxLayout()
-            layoutv2.addLayout(layouth2)
-            w = QLabel('Value source:')
-            layouth2.addWidget(w)
-            self._widget_registry[paramset_num]['RelModeSourceLabel'] = w
-            bg = QButtonGroup(layouth2)
-            for imp in ('Manual', 'Last', 'Last 10'):
-                rb = QRadioButton(imp)
-                bg.addButton(rb)
-                rb.button_group = bg
-                rb.wid = (paramset_num, imp)
-                rb.clicked.connect(self._on_click_rel_mode_source)
-                layouth2.addWidget(rb)
-                self._widget_registry[paramset_num][f'RelModeSource_{imp}'] = rb
-            layouth2.addStretch()
+            # # Relative value source
+            # layouth2 = QHBoxLayout()
+            # layoutv2.addLayout(layouth2)
+            # w = QLabel('Value source:')
+            # layouth2.addWidget(w)
+            # self._widget_registry[paramset_num]['RelModeSourceLabel'] = w
+            # bg = QButtonGroup(layouth2)
+            # for imp in ('Manual', 'Last', 'Last 10'):
+            #     rb = QRadioButton(imp)
+            #     bg.addButton(rb)
+            #     rb.button_group = bg
+            #     rb.wid = (paramset_num, imp)
+            #     rb.clicked.connect(self._on_click_rel_mode_source)
+            #     layouth2.addWidget(rb)
+            #     self._widget_registry[paramset_num][f'RelModeSource_{imp}'] = rb
+            # layouth2.addStretch()
 
-            layouts.addStretch()
+            # layouts.addStretch()
 
         ###### ROWS 5-8 - MEASUREMENTS ######
 

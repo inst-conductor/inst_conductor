@@ -41,7 +41,8 @@ import asyncio
 import json
 import time
 
-from PyQt6.QtWidgets import (QGridLayout,
+from PyQt6.QtWidgets import (QCheckBox,
+                             QGridLayout,
                              QGroupBox,
                              QHBoxLayout,
                              QLabel,
@@ -118,17 +119,20 @@ class InstrumentSiglentSPD3303(Device4882):
         self._ready_to_close = False
         await super().disconnect(*args, **kwargs)
 
-    def configure_widget(self, main_window):
-        return InstrumentSiglentSPD3303ConfigureWidget(main_window, self)
+    def configure_widget(self, main_window, measurements_only):
+        return InstrumentSiglentSPD3303ConfigureWidget(
+            main_window,
+            self,
+            measurements_only=measurements_only)
 
     async def measure_voltage(self, ch):
-        return float(await self.query(f'MEAS:VOLT? CH{ch}'))
+        return round(float(await self.query(f'MEAS:VOLT? CH{ch}')), 6)
 
     async def measure_current(self, ch):
-        return float(await self.query(f'MEAS:CURR? CH{ch}'))
+        return round(float(await self.query(f'MEAS:CURR? CH{ch}')), 6)
 
     async def measure_power(self, ch):
-        return float(await self.query(f'MEAS:POWER? CH{ch}'))
+        return round(float(await self.query(f'MEAS:POWER? CH{ch}')), 6)
 
     async def measure_vcp(self, ch):
         return (await self.measure_voltage(ch),
@@ -251,17 +255,18 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                 status = await self._inst.query('SYST:STATUS?')
                 status = int(status.replace('0x', ''), base=16)
                 for ch in range(2):
-                    self._psu_voltage[ch] = float(await self._inst.query(f'CH{ch+1}:VOLT?'))
-                    self._psu_current[ch] = float(
-                        await self._inst.query(f'CH{ch+1}:CURRENT?'))
+                    self._psu_voltage[ch] = round(
+                        float(await self._inst.query(f'CH{ch+1}:VOLT?')), 6)
+                    self._psu_current[ch] = round(
+                        float(await self._inst.query(f'CH{ch+1}:CURRENT?')), 6)
                     self._psu_on_off[ch] = bool(status & (1 << (ch+4)))
                     for entry in range(5):
                         # TIMER:SET? returns an extra comma at the end for some reason
                         res = await self._inst.query(f'TIMER:SET? CH{ch+1},{entry+1}')
                         res = res.split(',')
-                        volt = float(res[0])
-                        curr = float(res[1])
-                        timer = float(res[2])
+                        volt = round(float(res[0]), 6)
+                        curr = round(float(res[1]), 6)
+                        timer = round(float(res[2]), 6)
                         self._psu_timer_params[ch][entry] = [volt, curr, timer]
                 # There's no way to know if CH3 is on or off
                 self._psu_on_off[2] = False
@@ -273,7 +278,7 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                     case 0x0C:
                         self._psu_mode = 'S'
 
-                await self._update_widgets()
+                await self._update_widgets(force_setpoint=(0,1))
             except NotConnected:
                 return
             except InstrumentClosed:
@@ -386,8 +391,6 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                 self._psu_on_off[0] = bool(status & 0x10)
                 self._psu_on_off[1] = bool(status & 0x20)
                 self._update_output_on_off_buttons()
-
-            async with self._config_lock:
                 triggers['CH1On']['val'] = self._psu_on_off[0]
                 triggers['CH2On']['val'] = self._psu_on_off[1]
                 triggers['CH1CV']['val'] = not self._psu_cc[0]
@@ -397,9 +400,23 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                 triggers['CH1TimerRunning']['val'] = self._timer_mode_running[0]
                 triggers['CH2TimerRunning']['val'] = self._timer_mode_running[1]
 
-            # XXX THIS IS DOING A ROLLING UPDATE INSTEAD OF UPDATING ALL THE
-            # VALUES AT ONCE
             for ch in range(2):
+                # If desired, find out the current instrument setting and update
+                # the setpoint inputs if it has changed
+                if self._widget_registry[f'RefreshDisplay{ch}'].isChecked():
+                    async with self._config_lock:
+                        set_voltage = round(
+                            float(await self._inst.query(f'CH{ch+1}:VOLT?')), 6)
+                        if set_voltage != self._psu_voltage[ch]:
+                            self._psu_voltage[ch] = set_voltage
+                            self._widget_registry[f'SetPoint{ch}V'].setValue(
+                                self._psu_voltage[ch])
+                        set_current = round(
+                            float(await self._inst.query(f'CH{ch+1}:CURRENT?')), 6)
+                        if set_current != self._psu_current[ch]:
+                            self._psu_current[ch] = set_current
+                            self._widget_registry[f'SetPoint{ch}I'].setValue(
+                                self._psu_current[ch])
                 voltage = None
                 w = self._widget_registry[f'MeasureV{ch}']
                 if not self._enable_measurement_v or not self._psu_on_off[ch]:
@@ -457,7 +474,7 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
     ### Setup Window Layout
     ############################################################################
 
-    def _init_widgets(self):
+    def _init_widgets(self, measurements_only=False):
         """Set up all the toplevel widgets."""
         toplevel_widget = self._toplevel_widget(has_reset=False)
 
@@ -543,10 +560,10 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
         shortcut.activated.connect(self._on_click_outputs_off)
 
         self._menu_do_view_minmax_limits(False)
-        self._menu_do_view_setpoints(True)
+        self._menu_do_view_setpoints(not measurements_only)
         self._menu_do_view_presets(False)
         self._menu_do_view_timer(False)
-        self._menu_do_view_output_on_off(True)
+        self._menu_do_view_output_on_off(not measurements_only)
         self._menu_do_view_measurements(True)
 
         self.show()
@@ -604,7 +621,7 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                         input.setValue(0)
                     else:
                         input.setValue(3.2)
-                input.editingFinished.connect(self._on_value_change)
+                input.editingFinished.connect(self._on_value_editing_finished)
                 layoutg2.addWidget(input, mm_num, 1, Qt.AlignmentFlag.AlignLeft)
                 self._widget_registry[f'{mm}{ch}{cv}'] = input
             layouth.addStretch()
@@ -624,13 +641,32 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
                 input.setRange(0, 32)
             else:
                 input.setRange(0, 3.2)
-            input.editingFinished.connect(self._on_value_change)
+            input.editingFinished.connect(self._on_value_editing_finished)
+            input.valueChanged.connect(self._on_value_changed)
             layouth = QHBoxLayout()
             layoutg.addLayout(layouth, 2, cv_num)
             layouth.addStretch()
             layouth.addWidget(input)
             layouth.addStretch()
             self._widget_registry[f'SetPoint{ch}{cv}'] = input
+
+        # Checkboxes for live updates - not on the same grid
+        w = QWidget()
+        vert_layout.addWidget(w)
+        self._widgets_setpoints[ch].append(w)
+        layouth = QHBoxLayout(w)
+        layouth.setContentsMargins(0, 0, 0, 0)
+        layouth.addStretch()
+        cb = QCheckBox('Update inst in real time')
+        cb.setChecked(False)
+        layouth.addWidget(cb)
+        layouth.addStretch()
+        self._widget_registry[f'UpdateInstRT{ch}'] = cb
+        cb = QCheckBox('Refresh display from inst')
+        cb.setChecked(True)
+        layouth.addWidget(cb)
+        layouth.addStretch()
+        self._widget_registry[f'RefreshDisplay{ch}'] = cb
 
             # Adjustment knobs
             # w = QWidget()
@@ -924,29 +960,30 @@ Alt+N      All channels ON
                 for ch in range(max_ch):
                     key = f'CH{ch+1}:VOLT'
                     volt = cfg[key]
-                    self._psu_voltage[ch] = float(volt)
+                    self._psu_voltage[ch] = round(float(volt), 6)
                     await self._inst.write(f'{key} {volt}')
                     key = f'CH{ch+1}:CURR'
                     curr = cfg[key]
-                    self._psu_current[ch] = float(curr)
+                    self._psu_current[ch] = round(float(curr), 6)
                     await self._inst.write(f'{key} {curr}')
                     for num in range(5):
                         key = f'TIMER:SET CH{ch+1},{num+1}'
                         val = cfg[key]
                         await self._inst.write(f'{key},{val}')
-                        v, c, t = [float(x) for x in val.split(',')]
+                        v, c, t = [round(float(x), 6) for x in val.split(',')]
                         self._psu_timer_params[ch][num] = [v, c, t]
                     for num in range(len(self._presets[ch])):
                         key = f'CH{ch+1}:PRESET {num+1}'
                         val = cfg[key]
-                        v, c = [float(x) for x in val.split(',')]
+                        v, c = [round(float(x), 6) for x in val.split(',')]
                         self._presets[ch][num] = [v, c]
                     for mm in ('Min', 'Max'):
                         for cv in ('V', 'I'):
                             key1 = f'{mm}{ch}{cv}'
                             key2 = f'{mm}{ch+1}{cv}'
-                            self._widget_registry[key1].setValue(float(cfg[key2]))
-                await self._update_widgets()
+                            self._widget_registry[key1].setValue(
+                                round(float(cfg[key2]), 6))
+                await self._update_widgets(force_setpoint=(0,1))
         except NotConnected:
             return
         except InstrumentClosed:
@@ -959,6 +996,13 @@ Alt+N      All channels ON
     @asyncSlot()
     async def _menu_do_device_independent(self):
         """Handle Device Independent menu."""
+        if self._psu_mode == 'I':
+            return
+        # This can be done from a keyboard accelerator, in which case we should
+        # accept whatever change the user has made to the setpoints first
+        for ch in range(2):
+            await self._on_value_changed_helper(self._widget_registry[f'SetPoint{ch}V'])
+            await self._on_value_changed_helper(self._widget_registry[f'SetPoint{ch}I'])
         try:
             async with self._config_lock:
                 self._widget_registry['IndependentAction'].setChecked(True)
@@ -970,6 +1014,8 @@ Alt+N      All channels ON
                 self._timer_mode_running[0] = False
                 self._timer_mode_running[1] = False
                 await self._inst.write('OUTPUT:TRACK 0') # Turns off the outputs
+                # Going into Independent mode the setpoints will already be the
+                # correct values so no need to update the widgets
                 await self._update_widgets()
         except NotConnected:
             return
@@ -983,6 +1029,14 @@ Alt+N      All channels ON
     @asyncSlot()
     async def _menu_do_device_series(self):
         """Handle Device Series menu."""
+        # This can be done from a keyboard accelerator, in which case we should
+        # accept whatever change the user has made to the setpoints first
+        if self._psu_mode == 'S':
+            return
+
+        for ch in range(2):
+            await self._on_value_changed_helper(self._widget_registry[f'SetPoint{ch}V'])
+            await self._on_value_changed_helper(self._widget_registry[f'SetPoint{ch}I'])
         try:
             async with self._config_lock:
                 self._widget_registry['IndependentAction'].setChecked(False)
@@ -994,7 +1048,9 @@ Alt+N      All channels ON
                 self._timer_mode_running[0] = False
                 self._timer_mode_running[1] = False
                 await self._inst.write('OUTPUT:TRACK 1') # Turns off the outputs
-                await self._update_widgets()
+                # Going into series mode we are forcing the setpoints to be the
+                # same so we need to update the widgets
+                await self._update_widgets(force_setpoint=(0,1))
         except NotConnected:
             return
         except InstrumentClosed:
@@ -1007,6 +1063,13 @@ Alt+N      All channels ON
     @asyncSlot()
     async def _menu_do_device_parallel(self):
         """Handle Device Parallel menu."""
+        # This can be done from a keyboard accelerator, in which case we should
+        # accept whatever change the user has made to the setpoints first
+        if self._psu_mode == 'P':
+            return
+        for ch in range(2):
+            await self._on_value_changed_helper(self._widget_registry[f'SetPoint{ch}V'])
+            await self._on_value_changed_helper(self._widget_registry[f'SetPoint{ch}I'])
         try:
             async with self._config_lock:
                 self._widget_registry['IndependentAction'].setChecked(False)
@@ -1018,7 +1081,9 @@ Alt+N      All channels ON
                 self._timer_mode_running[0] = False
                 self._timer_mode_running[1] = False
                 await self._inst.write('OUTPUT:TRACK 2') # Turns off the outputs
-                await self._update_widgets()
+                # Going into parallel mode we are forcing the setpoints to be the
+                # same so we need to update the widgets
+                await self._update_widgets(force_setpoint=(0,1))
         except NotConnected:
             return
         except InstrumentClosed:
@@ -1105,8 +1170,22 @@ Alt+N      All channels ON
                     w.hide()
 
     @asyncSlotSender()
-    async def _on_value_change(self, input):
-        """Handle clicking on any input value edit box."""
+    async def _on_value_editing_finished(self, input):
+        """Handle exiting focus on any input value edit box."""
+        await self._on_value_changed_helper(input)
+
+    @asyncSlotSender()
+    async def _on_value_changed(self, input):
+        """Handle value changed in a setpoint for real-time instrument update."""
+        if self._disable_callbacks: # Prevent recursive calls
+            return
+        wid = input.wid
+        ch = wid[-1]
+        if self._widget_registry[f'UpdateInstRT{ch}'].isChecked():
+            await self._on_value_changed_helper(input)
+
+    async def _on_value_changed_helper(self, input):
+        """Handle value change on any input value edit box."""
         if self._disable_callbacks: # Prevent recursive calls
             return
         try:
@@ -1115,6 +1194,12 @@ Alt+N      All channels ON
                 wid_type = wid[0]
                 ch = wid[-1]
                 val = input.value()
+                # For a min/max widget, we update the min/max setting on the associated
+                # setpoint input, and then fall through to pretending someone changed
+                # the setpoint input (since in might have changed due to the new limits)
+                # and write the instrument if necessary.
+                # There's never a need to force update of the setpoint widgets, though,
+                # since they will always have the correct value.
                 match wid_type:
                     case 'Min':
                         vi = wid[1]
@@ -1204,7 +1289,7 @@ Alt+N      All channels ON
                 self._psu_voltage[ch] = volt
                 self._psu_current[ch] = curr
                 # This will take care of min/max, which might change the values
-                await self._update_widgets()
+                await self._update_widgets(force_setpoint=(ch,))
                 volt = self._widget_registry[f'SetPoint{ch}V'].value()
                 curr = self._widget_registry[f'SetPoint{ch}I'].value()
                 await self._inst.write(f'CH{ch+1}:VOLT {volt:.3f}')
@@ -1378,6 +1463,7 @@ Alt+N      All channels ON
                     self._enable_measurement_p = cb.isChecked()
             await self._update_widgets()
 
+
     ################################
     ### Internal helper routines ###
     ################################
@@ -1420,7 +1506,7 @@ Alt+N      All channels ON
             await self._connection_lost()
             return
 
-    async def _update_widgets(self):
+    async def _update_widgets(self, force_setpoint=[]):
         """Update all widgets with the current internal state.
 
         Does not lock.
@@ -1438,10 +1524,15 @@ Alt+N      All channels ON
                         self._widget_registry[f'{mm}0{cv}'].value())
             self._psu_voltage[1] = self._psu_voltage[0]
             self._psu_current[1] = self._psu_current[0]
+            if not force_setpoint: # Don't duplicate effort
+                self._widget_registry[f'SetPoint1V'].setValue(self._psu_voltage[1])
+                self._widget_registry[f'SetPoint1I'].setValue(self._psu_current[1])
 
-        for ch in range(2):
+        for ch in force_setpoint:
             self._widget_registry[f'SetPoint{ch}V'].setValue(self._psu_voltage[ch])
             self._widget_registry[f'SetPoint{ch}I'].setValue(self._psu_current[ch])
+
+        for ch in range(2):
             for preset_num in range(len(self._presets[ch])):
                 button = self._widget_registry[f'Preset{ch}_{preset_num}']
                 volt, curr = self._presets[ch][preset_num]
@@ -1573,7 +1664,7 @@ Alt+N      All channels ON
             else:
                 hb_delta = cur_time - self._timer_mode_last_hb
             self._timer_mode_last_hb = cur_time
-            update = False
+            update = []
             for ch in range(2):
                 if self._timer_mode_running[ch]:
                     widths = [x[2] for x in self._psu_timer_params[ch]]
@@ -1602,9 +1693,9 @@ Alt+N      All channels ON
                             self._psu_current[ch] = self._psu_timer_params[ch][
                                 step_num][1]
                             self._timer_mode_cur_step_elapsed[ch] = delta
-                        update = True
+                        update.append(ch)
             if update:
-                await self._update_widgets()
+                await self._update_widgets(force_setpoint=update)
             self._update_timer_table_graphs(timer_step_only=True)
 
 
