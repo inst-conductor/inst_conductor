@@ -95,6 +95,7 @@ from conductor.device import (Device4882,
                               ConnectionLost,
                               InstrumentClosed,
                               NotConnected)
+from conductor.version import VERSION
 
 
 class InstrumentSiglentSDM3000(Device4882):
@@ -1019,7 +1020,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
     def _menu_do_about(self):
         """Show the About box."""
         supported = ', '.join(self._inst.supported_instruments())
-        msg = f"""Siglent SDM3000-series instrument interface.
+        msg = f"""Siglent SDM3000-series instrument interface ({VERSION}).
 
 Copyright 2023, Robert S. French.
 

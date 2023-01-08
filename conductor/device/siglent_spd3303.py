@@ -69,6 +69,7 @@ from conductor.device import (Device4882,
                               ConnectionLost,
                               InstrumentClosed,
                               NotConnected)
+from conductor.version import VERSION
 
 
 class InstrumentSiglentSPD3303(Device4882):
@@ -850,7 +851,7 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
     def _menu_do_about(self):
         """Show the About box."""
         supported = ', '.join(self._inst.supported_instruments())
-        msg = f"""Siglent SPD3303X-series instrument interface.
+        msg = f"""Siglent SPD3303X-series instrument interface ({VERSION}).
 
 Copyright 2023, Robert S. French.
 

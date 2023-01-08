@@ -61,6 +61,7 @@ from conductor.stylesheet import QSS_THEME
 import conductor.device as device
 from conductor.plot_histogram_window import PlotHistogramWindow
 from conductor.plot_xy_window import PlotXYWindow
+from conductor.version import VERSION
 
 
 class MainWindow(QWidget):
@@ -561,7 +562,7 @@ class MainWindow(QWidget):
                 f'FW {x.inst.firmware_version}' for x in self._open_resources])
         if open == '':
             open = 'None'
-        msg = f"""Welcome to Instrument Conductor, a uniform controller for \
+        msg = f"""Welcome to Instrument Conductor ({VERSION}), a uniform controller for \
 Siglent benchtop instruments.
 
 Supported instruments:

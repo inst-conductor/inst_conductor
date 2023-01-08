@@ -133,7 +133,7 @@ from conductor.device import (Device4882,
                               ConnectionLost,
                               InstrumentClosed,
                               NotConnected)
-
+from conductor.version import VERSION
 
 class InstrumentSiglentSDL1000(Device4882):
     """Controller for SDL1000-series devices."""
@@ -1838,7 +1838,7 @@ class InstrumentSiglentSDL1000ConfigureWidget(ConfigureWidgetBase):
     def _menu_do_about(self):
         """Show the About box."""
         supported = ', '.join(self._inst.supported_instruments())
-        msg = f"""Siglent SDL1000-series instrument interface.
+        msg = f"""Siglent SDL1000-series instrument interface ({VERSION}).
 
 Copyright 2023, Robert S. French.
 
