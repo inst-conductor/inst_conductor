@@ -743,9 +743,9 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
 
         ### Add to Help menu
 
-        action = QAction('&Keyboard Shortcuts...', self)
-        action.triggered.connect(self._menu_do_keyboard_shortcuts)
-        self._menubar_help.addAction(action)
+        # action = QAction('&Keyboard Shortcuts...', self)
+        # action.triggered.connect(self._menu_do_keyboard_shortcuts)
+        # self._menubar_help.addAction(action)
 
         ### Set up configuration window widgets
 
@@ -804,11 +804,12 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                              '2-W Resistance',
                              '4-W Resistance'),
                             ('Capacitance',
-                             'Continuity',
-                             'Diode',
+                            #  'Continuity',
+                            #  'Diode',
                              'Frequency',
                              'Period',
-                             'Temperature')):
+                            #  'Temperature'
+                             )):
                 layoutv = QVBoxLayout()
                 layoutv.setSpacing(10)
                 layouth.addLayout(layoutv)
