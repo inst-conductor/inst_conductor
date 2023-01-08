@@ -10,8 +10,9 @@ Source available from https://github.com/inst-conductor/inst_conductor.git
   * "Program Mode" is not implemented
 
 * Siglent SDM3000 series (SDM3045X, SDM3055, SDM3065X)
-  * Temperature, diode, and continuity modes not implemented
-  * Relative measurements are not implemented
+  * Temperature, diode, and continuity modes not implemented.
+  * Relative measurements are not implemented.
+  * Loading a configuration does not properly update the UI.
   * Manually returning to "Local" mode on the instrument panel will cause the GUI to fail
     and it must be restarted from scratch.
 

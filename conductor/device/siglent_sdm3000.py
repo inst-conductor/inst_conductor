@@ -633,7 +633,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                     # Update the instrument for the current paramset
                     self._last_measurement_param_state = (
                         await self._update_instrument(paramset_num,
-                                                    self._last_measurement_param_state))
+                                                      self._last_measurement_param_state))
                     if self._inst._is_fake:
                         val = random.random()
                     else:
@@ -1072,6 +1072,7 @@ Connected to {self._inst.resource_name}
             self._param_state = ps
             # Clean up the param state. We don't want to start with the load or short on.
             await self._update_instrument()
+            self._update_all_widgets()
 
     @asyncSlot()
     async def _menu_do_reset_device(self):

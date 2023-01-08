@@ -76,6 +76,9 @@
 - Bugs:
   - When starting up with a battery test already running, the battery test report gets
     confused. When you stop the test, you get a report that says there is no report.
+  - Clicking on an up/down arrow while leaving focus from another numeric input widget
+    with overwrite the new up/down value with the old one when the focus changes.
+    (See similar problem fixed in SPD)
 
 - Enhancements:
   - Add progress bar during refresh()
