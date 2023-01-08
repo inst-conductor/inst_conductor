@@ -1,74 +1,144 @@
-** PyInstaller **
-
-pyinstaller inst_conductor.py --hidden-import pyqtgraph.graphicsItems.ViewBox.axisCtrlTemplate_pyqt6 --hidden-import pyqtgraph.graphicsItems.ViewBox.axisCtrlTemplate_pyqt6 --hidden-import pyqtgraph.graphicsItems.PlotItem.plotConfigTemplate_pyqt6 --hidden-import pyqtgraph.imageview.ImageViewTemplate_pyqt6 --hidden-import pyvisa_py --noconfirm --onefile --windowed
-
-https://github.com/pyqtgraph/pyqtgraph/issues/1381
-
 ** General **
 
-- Look into tab focus
-- Write help for each instrument
-- Add overall README file
-- Add error checking to opening resource and other VISA accesses
-- Add controllable parameters to each instrument (e.g. voltage and current level)
+- Check to make sure everything still works when windows are minimized
+
+- Bugs:
+  - Alt+Mouse Wheel does not move the 0.001 digit like it should (known Qt bug)
+    Perhaps related to: https://bugreports.qt.io/browse/QTBUG-30948
+  - Look at MainWindow::closeEvent
+  - Add log messages for devices closed and main window closed
+  - --help crashes
+
+- Enhancements:
+  * Add buttons to each instrument to open a plotting window or histogram window the
+    shows the current measurement
+  * Convert everything to global style sheets
+  - Mouse wheel or up/down arrow should move digit at cursor position like a real instrument
+  - Write help for each instrument
+  - Add overall README file
+  - Look into tab focus order
+
+- Major new features:
+  - Support USB connection
+  - Automatic discovery of TCPIP instruments
+  - Add ability to step through various curves while changing parameters for an instrument
+    with defined min/max range, step size, and step time
+    - Add controllable parameters to each instrument (e.g. voltage and current level)
+  - Virtual instruments that do math, generate curves, etc
+  - Measurement display live spreadsheet
+  - Measurement display widgets
+  - Implement SDG
+  - Implement SDS
 
 ** Acquisition **
 
-- Implement better way to handle breaks between time sequences instead of just inserting
-  a dummy NaN. Maybe separate lists of measurements that are then stitched together?
-  Right now if there's a segment with only one measurement it isn't drawn.
-- Bug - Closing an instrument doesn't start a new segment so when the instrument is
-  reopened it just has a big jump from the previous elapsed time (when there's only
-  one instrument).
-- Load from CSV
-- Real-time save to CSV
-- Replay recording in real time or sped up / slowed down
+- Bugs:
+  - Closing an instrument doesn't start a new segment so when the instrument is
+    reopened it just has a big jump from the previous elapsed time (when there's only
+    one instrument).
+  - Pausing acquisition still records one additional NaN, which looks odd to the user
+    because it looks like the pause hasn't really happened yet
+
+- Enhancements:
+  * Real-time save to CSV
+    - Put timestamps on measurements in dictionary
+  - Replay recording in real time or sped up / slowed down
+  - Implement better way to handle breaks between time sequences instead of just inserting
+    a dummy NaN. Maybe separate lists of measurements that are then stitched together?
+    Right now if there's a segment with only one measurement it isn't drawn.
+  - Load from CSV
+
 
 ** XY Plotting **
 
-- Bug - sharing Y axis doesn't refresh the position of the Y axis label
-- Bug - Axes occasionally don't update in plot window
-- Add custom past time
+- Bugs:
+  - Sharing Y axis doesn't refresh the position of the Y axis label
+  - Axes occasionally don't update in plot window
+  - When sharing Y axes, figure out what to do with the plot colors not agreeing with the
+    axis color
+
+- Enhancements:
+  - Add custom past time
+
 
 ** Histogram View **
 
-- Show gridlines
-- Cumulative percentage
-- Cumulative distribution
-- Probability density
-- Add custom past time
+- Enhancements:
+  - Show gridlines
+  - Cumulative percentage
+  - Cumulative distribution
+  - Probability density
+  - Add custom past time
 
-** Measurements/Statistics View **
 
-** Automated Control **
+** SDL **
 
-- Add ability to step through various curves while changing parameters for an instrument
-  with defined min/max range, step size, and step time
+- Bugs:
+  - When starting up with a battery test already running, the battery test report gets
+    confused. When you stop the test, you get a report that says there is no report.
 
-** Misc **
+- Enhancements:
+  - Add progress bar during refresh()
+  - Make "reset test log" more obvious when there is something in the log
+  - Implement Program mode (and stop on fail)
 
-- Virtual instruments that do math, generate curves, etc
-- Instruments sampling at different rates
-- Multi-threading for increased performance, or checking the event queue in
-between measurements
+- Cleanup:
+  - Clean up widget init code to have more standardized names
 
-** SDL1000 **
-
-- Program mode (and stop on fail)
 
 ** SPD **
 
-- Channel 3 indicator and control
-- Maybe figure out a way to enable/disable measurements
+- Bugs:
+  * Selecting a voltage or current directly on the instrument will override the minimum
+    or maximum limits set in the application.
+
+- Enhancements:
+  - Indicate edit of V/A is in progress and not applied to instrument yet (background or
+    font)
+  - Show status message when timer is on if timer display is not shown
+  - Channel 3 indicator and control if possible
+  - Enable/disable specific measurements
+  - Check to see if SPD3303C is has the same controls
+    https://siglentna.com/power-supplies/spd3303c-series-programmable-dc-power-supply/
+  - Implement support for SPD1168X and SPD1305X
+    https://siglentna.com/power-supplies/spd1000x-series-programmable-dc-power-supply/
+
+- Cleanup:
+  - Clean up widget init code to have more standardized names
+
 
 ** SDM **
 
-Siglent Technologies,SDM3055,SDM35FAQ1R1838,1.01.01.25
+- Bugs:
+  * Not handling instrument disconnect
+  * If you go into local mode from the panel the UI freezes and won't come back
+  * Not all instrument modes are implemented
+  * Relative measurements not implemented
+  * Setting auto range should grey out range radio buttons
+
+- Enhancements:
+  * Put measurements together with their parameters
+  * Refresh from instrument: Show warning since it is only updating the first
+    configuration and overwriting the others. Also disable other measurements.
+  * Add safety interlock for multiple measurements (e.g. no voltage and resistance)
+  - Change colors to the side of each set of parameters to they are accessible to
+    color-blind people
+  - Handle 3045X, 3055, and 3065X with different numbers of digits
+  - Implement scan card
+
 
 ** SDS **
 
 Siglent Technologies,SDS1204X-E,SDSMMEBQ4R5097,8.2.6.1.37R2
 
+
 ** SDG **
 
 Siglent Technologies,SDG1062X,SDG1XCAQ4R3005,1.01.01.33R1B6
+
+
+** PyInstaller **
+
+pyinstaller inst_conductor.py --hidden-import pyqtgraph.graphicsItems.ViewBox.axisCtrlTemplate_pyqt6 --hidden-import pyqtgraph.graphicsItems.ViewBox.axisCtrlTemplate_pyqt6 --hidden-import pyqtgraph.graphicsItems.PlotItem.plotConfigTemplate_pyqt6 --hidden-import pyqtgraph.imageview.ImageViewTemplate_pyqt6 --hidden-import pyvisa_py --noconfirm --onefile --windowed
+
+https://github.com/pyqtgraph/pyqtgraph/issues/1381

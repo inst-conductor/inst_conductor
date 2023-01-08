@@ -1,12 +1,12 @@
 ################################################################################
-# device/config_widget_base.py
+# conductor/device/config_widget_base.py
 #
 # This file is part of the inst_conductor software suite.
 #
 # It contains the parent class for all instrument configuration widgets to
 # provide utility functions and a consistent look and feel.
 #
-# Copyright 2022 Robert S. French (rfrench@rfrench.org)
+# Copyright 2023 Robert S. French (rfrench@rfrench.org)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -28,10 +28,8 @@ from PyQt6.QtWidgets import (QAbstractSpinBox,
                              QDialogButtonBox,
                              QDoubleSpinBox,
                              QFileDialog,
-                             QInputDialog,
                              QLayout,
                              QMenuBar,
-                             QMessageBox,
                              QPlainTextEdit,
                              QPushButton,
                              QStatusBar,
@@ -42,28 +40,42 @@ from PyQt6.QtCore import Qt, QAbstractTableModel, QTimer
 from PyQt6.QtGui import QAction, QColor
 from PyQt6.QtPrintSupport import QPrintDialog
 
+from conductor.qasync import asyncSlot, asyncClose
+from conductor.qasync.qasync_helper import (QAsyncInputDialog,
+                                            QAsyncMessageBox)
+from conductor.stylesheet import QSS_THEME
+
+from conductor.device import (InstrumentClosed,
+                              NotConnected)
+
 
 class ConfigureWidgetBase(QWidget):
-    """The base class for all instrument configuration widgets."""
-    def __init__(self, main_window, instrument):
+    """The base class for all instrument configuration widgets.
+
+    Must call refresh after instance creation."""
+    def __init__(self, main_window, instrument, measurements_only=False):
         super().__init__()
         self._style_env = main_window._style_env
         self._main_window = main_window
         self._inst = instrument
         self._statusbar = None
-        self._init_widgets()
+        self._init_widgets(measurements_only=measurements_only)
         self.show() # Do this here so all the widgets get their sizes before being hidden
-        self.refresh()
 
     ### The following functions must be implemented by all configuration widgets.
 
-    def refresh(self):
+    async def refresh(self):
         """Reload the UI state from the instrument state."""
         raise NotImplementedError
 
-    def update_measurements_and_triggers(self):
+    async def update_measurements_and_triggers(self):
         """Read current values, update control panel display, return the values."""
         raise NotImplementedError
+
+    @property
+    def connected(self):
+        """See if the associated instrument is still connected."""
+        return self._inst.connected
 
     ### Internal utility functions.
 
@@ -75,6 +87,8 @@ class ConfigureWidgetBase(QWidget):
         """
         QWidget.__init__(self)
         self.setWindowTitle(f'{self._inst.long_name} ({self._inst.name})')
+
+        self.setStyleSheet(QSS_THEME)
 
         layoutv = QVBoxLayout(self)
         layoutv.setContentsMargins(0, 0, 0, 0)
@@ -131,28 +145,31 @@ class ConfigureWidgetBase(QWidget):
 
         return central_widget
 
-    def _menu_do_refresh_configuration(self):
+    @asyncSlot()
+    async def _menu_do_refresh_configuration(self):
         """Execute Configuration:Refresh from instrument menu option."""
-        self.refresh()
+        await self.refresh()
 
-    def _menu_do_rename_device(self):
+    @asyncSlot()
+    async def _menu_do_rename_device(self):
         """Execute Device:Rename menu option."""
-        new_name, ok = QInputDialog.getText(self, 'Change device name',
-                                            'Device name:',
-                                            text=self._inst.name)
+        new_name, ok = await QAsyncInputDialog.getText(self,
+                                                       'Change device name',
+                                                       'Device name:',
+                                                       text=self._inst.name)
         if ok and new_name != self._inst.name:
             if new_name in self._main_window.device_names:
-                QMessageBox.critical(self, 'Duplicate Name',
-                                     f'Name "{new_name}" is already used!')
+                QAsyncMessageBox.critical(self, 'Duplicate Name',
+                                          f'Name "{new_name}" is already used!')
                 return
             self._inst.name = new_name
-            self.device_renamed()
+            await self.device_renamed()
 
-    def device_renamed(self):
+    async def device_renamed(self):
         """Called when the device is renamed."""
         self.setWindowTitle(f'{self._inst.long_name} ({self._inst.name})')
         # Notify the main widget so that all of the UI lists and whatnot can be updated.
-        self._main_window.device_renamed(self)
+        await self._main_window.device_renamed(self)
 
     def _menu_do_load_configuration(self):
         """Execute Configuration:Load menu option."""
@@ -171,10 +188,38 @@ class ConfigureWidgetBase(QWidget):
         raise NotImplementedError
 
     def closeEvent(self, event):
-        """Handle window close event by disconnecting from the instrument."""
-        self._inst.disconnect()
+        """Handle window close event.
+
+        We really want to disconnect from the instrument and notify the main_window
+        here, but we can't because of a problem with qasyncio. The closeEvent()
+        slot can't be marked asyncSlot because it throws an exception about a
+        TypeError and invalid return type. This exception can't be caught and appears
+        to be down at the C interface level. So we do a hack and simply mark
+        the instrument as read_to_close, and the next time we do anything with it
+        we close it."""
+        self._inst._ready_to_close = True
+        super().closeEvent(event)
+
+    async def _actually_close(self):
+        """Actually do the close operation in an async environment.
+
+        See above.
+        """
+        self._inst.ready_to_close = False # Want this to actually succeed
+        try:
+            await self._inst.disconnect()
+        except (InstrumentClosed, NotConnected):
+            pass
         # Notify the main widget so that all of the UI lists and whatnot can be updated.
-        self._main_window.device_window_closed(self._inst)
+        await self._main_window.device_window_closed(self._inst)
+
+    async def _connection_lost(self):
+        """Announce that we lost the connection and close the window."""
+        self.setEnabled(False)
+        self.close()
+        QAsyncMessageBox.critical(self, 'Connection Lost',
+                                  f'Lost connection to {self._inst.long_name}')
+        await self._actually_close()
 
 
 class PrintableTextDialog(QDialog):
@@ -338,7 +383,7 @@ class ListTableModel(QAbstractTableModel):
 class LongClickButton(QPushButton):
     """Button that implements both normal click and long-hold click."""
     def __init__(self, text, click_handler, long_click_handler,
-                 delay=2000):
+                 delay=1000):
         super().__init__(text)
         self._click_handler = click_handler
         self._long_click_handler = long_click_handler

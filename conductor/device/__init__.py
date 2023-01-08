@@ -1,11 +1,11 @@
 ################################################################################
-# device/__init__.py
+# conductor/device/__init__.py
 #
 # This file is part of the inst_conductor software suite.
 #
 # It contains the top-level interface to the instrument device driver module.
 #
-# Copyright 2022 Robert S. French (rfrench@rfrench.org)
+# Copyright 2023 Robert S. French (rfrench@rfrench.org)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,7 +21,10 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ################################################################################
 
-from .device import Device4882
+from .device import (Device4882,
+                     ConnectionLost,
+                     InstrumentClosed,
+                     NotConnected)
 from .siglent_sdl1000 import InstrumentSiglentSDL1000
 from .siglent_sdm3000 import InstrumentSiglentSDM3000
 from .siglent_spd3303 import InstrumentSiglentSPD3303
@@ -43,18 +46,34 @@ class UnknownInstrumentType(Exception):
     pass
 
 
-def create_device(rm, resource_name, existing_names=None, **kwargs):
+async def create_device(resource_name, existing_names=None, **kwargs):
     """"Query a device for its IDN and create the appropriate instrument class."""
-    dev = Device4882(rm, resource_name)
-    dev.connect()
-    idn = dev.idn()
-    idn_split = idn.split(',')
-    cls = None
-    if len(idn_split) >= 2:
-        manufacturer, model, *_ = idn_split
-        cls = _DEVICE_MAPPING.get((manufacturer, model), None)
+    dev = Device4882(resource_name)
+    await dev.connect()
+    if dev._is_fake:
+        model = resource_name.replace('FAKE::', '')
+        for (manufacturer, inst_name), cls in _DEVICE_MAPPING.items():
+            if inst_name == model:
+                break
+        else:
+            raise UnknownInstrumentType(model)
+    else:
+        idn = await dev.idn()
+        idn_split = idn.split(',')
+        cls = None
+        if len(idn_split) >= 2:
+            manufacturer, model, *_ = idn_split
+            # This is a hack to handle a bug with the SDM3055 when it has been
+            # reloaded with the recovery image and loses the model number and
+            # S/N. We will just identify it using the most recent firmware
+            # we know about.
+            if manufacturer == 'Siglent Technologies' and model == ' ':
+                manufacturer, model, serial, firmware = idn_split
+                if firmware == '1.01.01.25':
+                    model = 'SDM3055'
+            cls = _DEVICE_MAPPING.get((manufacturer, model), None)
     if cls is None:
         raise UnknownInstrumentType(idn)
-    new_dev = cls(rm, resource_name, existing_names=existing_names, **kwargs)
-    new_dev.connect(resource=dev._resource)
+    new_dev = cls(resource_name, existing_names=existing_names, **kwargs)
+    await new_dev.connect(reader=dev._reader, writer=dev._writer)
     return new_dev

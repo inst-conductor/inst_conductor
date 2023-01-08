@@ -1,11 +1,11 @@
 ################################################################################
-# plot_histogram_window.py
+# conductor/plot_histogram_window.py
 #
 # This file is part of the inst_conductor software suite.
 #
 # It contains the plot window that displays a histogram.
 #
-# Copyright 2022 Robert S. French (rfrench@rfrench.org)
+# Copyright 2023 Robert S. French (rfrench@rfrench.org)
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,6 +21,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ################################################################################
 
+import numpy as np
+
 from PyQt6.QtWidgets import (QCheckBox,
                              QColorDialog,
                              QComboBox,
@@ -34,8 +36,6 @@ from PyQt6.QtWidgets import (QCheckBox,
                              QWidget)
 from PyQt6.QtGui import QAction, QColor, QKeySequence
 from PyQt6.QtCore import Qt
-
-import numpy as np
 import pyqtgraph as pg
 
 

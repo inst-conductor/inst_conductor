@@ -5,6 +5,28 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Fake SDM",
+            "type": "python",
+            "request": "launch",
+            "program": "inst_conductor.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "FAKE::SDM3055"
+            ]
+        },
+        {
+            "name": "No Inst",
+            "type": "python",
+            "request": "launch",
+            "program": "inst_conductor.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--console-log-level", "info"
+            ]
+        },
+        {
             "name": "SDM",
             "type": "python",
             "request": "launch",
@@ -12,6 +34,7 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
+                "--console-log-level", "debug",
                 "192.168.0.62"
             ]
         },
@@ -23,6 +46,7 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
+                "--console-log-level", "debug",
                 "192.168.0.63"
             ]
         },
@@ -34,6 +58,7 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
+                "--console-log-level", "info",
                 "192.168.0.64"
             ]
         },
@@ -48,7 +73,48 @@
                 "192.168.0.63",
                 "192.168.0.64"
             ]
+        },
+        {
+            "name": "SPD&SDM",
+            "type": "python",
+            "request": "launch",
+            "program": "inst_conductor.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--console-log-level", "info",
+                "192.168.0.62",
+                "192.168.0.64"
+            ]
+        },
+        {
+            "name": "SDL&SPD&SDM",
+            "type": "python",
+            "request": "launch",
+            "program": "inst_conductor.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--console-log-level", "info",
+                "192.168.0.62",
+                "192.168.0.63",
+                "192.168.0.64"
+            ]
+        },
+        {
+            "name": "SDL&SPD&SDM Measurements only",
+            "type": "python",
+            "request": "launch",
+            "program": "inst_conductor.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--console-log-level", "info",
+                "--measurements-only",
+                "192.168.0.62",
+                "192.168.0.63",
+                "192.168.0.64"
+            ]
         }
-
     ]
 }
