@@ -140,6 +140,17 @@
   - Implement scan card
   - Limit checking (set min/max and indicate if measurement is outside limits)
 
+- To implemement:
+  - All NULL values/state
+  - Difference in NPLC
+  - Bandwidth
+  - Frequency volt range UI wrong
+  - FREQ/PER:APERTURE
+  - Everything about temperature
+  - CONT theshold value, volume, beeper
+  - DIOD theshold value, volume, beeper
+
+
 
 ** SDS **
 
