@@ -1825,38 +1825,234 @@ Connected to {self._inst.resource_name}
         await self._inst.write(f'{key} {fmt_data}')
 
 
-# [SENSe:]CURRent:{AC|DC}:NULL[:STATe]
-# [SENSe:]CURRent:{AC|DC}:NULL:VALue  -12 A to 12 A
-# [SENSe:]CURRent[:DC]:NPLC 0.3 | 1 | 10  FAST/MIDDLE/SLOW
-
+##########################################################################################
+# SCPI COMMAND REFERENCE
+##########################################################################################
+#
+# [SENSe:]FUNCtion[:ON] function
+#   CONTinuity   CURRent:AC   CURRent[:DC]
+#   DIODe        FREQuency    FRESistance
+#   PERiod       RESistance   TEMPerature
+#   VOLTage:AC   VOLTage:AC   VOLTage[:DC]
+#   CAPacitance
+# [SENSe:]FUNCtion[:ON]?
+#   The short form of the selected function is returned in
+#   quotation marks, with no optional keywords
+#     "CONT", "CURR:AC", "DIOD" and so on
+#
+#
+########## CURRENT ##########
+#
+# [SENSe:]CURRent:{AC|DC}:NULL[:STATe] {ON|1|OFF|0}
+# [SENSe:]CURRent:{AC|DC}:NULL[:STATe]?
+#
+# [SENSe:]CURRent:{AC|DC}:NULL:VALue {<value>|MIN|MAX|DEF}
+#   -11 to 11 A
+#   Disables :AUTO
+# [SENSe:]CURRent:{AC|DC}:NULL:VALue? [{MIN|MAX|DEF}]
+#
+# [SENSe:]CURRent:{AC|DC}:NULL:VALue:AUTO {ON|1|OFF|0}
+#   When automatic reference selection is ON, the first measurement made is used as the
+#   null value for all subsequent measurements.
+# [SENSe:]CURRent:{AC|DC}:NULL:VALue:AUTO?
+#
+# [SENSe:]CURRent:{AC|DC}:RANGe {<range>|MIN|MAX|DEF}
+#   3045X:  {600uA|6mA|60mA|600mA|6A|10A|AUTO}
+#       600uA and 6mA only in DC mode, min range 60mA in AC mode
+#   3055:   {200uA|2mA|20mA|200mA|2A|10A|AUTO}
+#       200uA and 2mA only in DC mode, min range 20mA in AC mode
+#   3065X:  {200uA|2mA|20mA|200mA|2A|10A|AUTO}
+#   Disables :AUTO
+# XXX? Unlike CONFigure and MEASure?, this command does not support the 10 A range
+# [SENSe:]CURRent:{AC|DC}:RANGe? [{MIN|MAX|DEF}]
+#
+# [SENSe:]CURRent:{AC|DC}:RANGe:AUTO {OFF|ON|ONCE}
+# [SENSe:]CURRent:{AC|DC}:RANGe:AUTO?
+#
+# [SENSe:]CURRent[:DC]:NPLC {<PLC>|MIN|MAX|DEF}
+#   3045X/3055: {0.3|1|10}
+#   3065X:      {100|10|1|0.5|0.05|0.005}
+#
+# [SENSe:]CURRent[:DC]:NPLC? [{MIN|MAX|DEF}]
+#
+# 3065X ONLY:
+#   [SENSe:]CURRent[:AC]:BANDwidth{VAL|MIN|MAX|DEF}
+#     {3Hz|20Hz|200Hz}
+#   [SENSe:]CURRent[:AC]:BANDwidth? [{MIN|MAX|DEF}]
+#
+# 3065X ONLY:
+#   [SENSe:]CURRent[:DC]:AZ[:STATe] {ON|1|OFF|0}
+#   [SENSe:]CURRent[:DC]:AZ[:STATe]?
+#     Auto-zero function
+#
+# 3045X/3055 ONLY:
+#   [SENSe]:CURRent[:DC]:FILTer[:STATe] {ON|1|OFF|0}
+#   [SENSe]:CURRent[:DC]:FILTer[:STATe]
+#
+#
+# ########## FREQUENCY/PERIOD ##########
+#
 # All parameters are shared between frequency and period measurements.
+#
 # [SENSe:]{FREQuency|PERiod}:NULL[:STATe] {ON|1|OFF|0}
-# [SENSe:]{FREQuency|PERiod}:NULL:VALue {<value>| minimum | maximum | default } -1.2E6 to +1.2E6
+# [SENSe:]{FREQuency|PERiod}:NULL[:STATe]?
+# [SENSe:]{FREQuency|PERiod}:NULL:VALue {<value>| minimum | maximum | default }
+#   -1.2E6 to +1.2E6
+#   Disables :AUTO
+# [SENSe:]{FREQuency|PERiod}:NULL:VALue? [{MIN|MAX|DEF}]
+#
 # [SENSe:]{FREQuency|PERiod}:NULL:VALue:AUTO {ON|1|OFF|0}
-# [SENSe:]{FREQuency|PERiod}:RANGe:LOWer {<filter>|MIN|MAX|DEF}
-
-# [SENSe:]{RESistance|FRESistance}:NULL[:STATe]
-# [SENSe:]{RESistance|FRESistance}:NULL:VALue             -120 MOHM to 120 MOHM
-# [SENSe:]{RESistance|FRESistance}:NULL:VALue:AUTO
-
-# [SENSe:]TEMPerature:NULL[:STATe]
-# [SENSe:]TEMPerature:NULL:VALue  -1.0E15 TO +1.0E15
-# [SENSe:]TEMPerature:NULL:VALue:AUTO
-# [SENSe:]TEMPerature:TRANsducer?
+# [SENSe:]{FREQuency|PERiod}:NULL:VALue:AUTO?
+#
+# [SENSe:]{FREQuency|PERiod}:VOLTage:RANGe {<range>|MIN|MAX|DEF}
+#   3045X:      {600 mV|6 V|60 V|600 V|750 V}
+#   3055/3065X: {200 mV|2 V|20 V|200 V|750 V}
+#   Disables :AUTO
+# [SENSe:]{FREQuency|PERiod}:VOLTage:RANGe? [{MIN|MAX|DEF}]
+#
+# [SENSe:]{FREQuency|PERiod}:VOLTage:RANGe:AUTO {OFF|ON|ONCE}
+# [SENSe:]{FREQuency|PERiod}:VOLTage:RANGe:AUTO?
+#
+# 3065X ONLY:
+#   [SENSe:]{FREQuency|PERiod}:APERture {<value>|MIN|MAX|DEF}
+#     {1ms|10ms|100ms|1s}
+#   [SENSe:]{FREQuency|PERiod}:APERture ? [{MIN|MAX|DEF}]
+#
+#
+# ########## RESISTANCE/FRESISTANCE ##########
+#
+# [SENSe:]{RESistance|FRESistance}:NPLC {<PLC>|MIN|MAX|DEF}
+#   3045X/3055: {0.3|1|10}
+#   3065X:      {100|10|1|0.5|0.05|0.005}  (50 Hz power)
+#
+# [SENSe:]{RESistance|FRESistance}:NULL[:STATe] {ON|1|OFF|0}
+# [SENSe:]{RESistance|FRESistance}:NULL[:STATe]?
+#
+# [SENSe:]{RESistance|FRESistance}:NULL:VALue {<value>|MIN|MAX|DEF}
+#   -110 MOHM to 110 MOHM
+#   Disables :AUTO
+# [SENSe:]{RESistance|FRESistance}:NULL:VALue? [{MIN|MAX|DEF}]
+#
+# [SENSe:]{RESistance|FRESistance}:NULL:VALue:AUTO {ON|1|OFF|0}
+# [SENSe:]{RESistance|FRESistance}:NULL:VALue:AUTO?
+#
+# [SENSe:]{RESistance|FRESistance}:RANGe {<range>|MIN|MAX|DEF}
+#   3045X:  {600 ohm|6 kohm|60 kohm|600 kohm|6 Mohm|60 Mohm|100 Mohm}
+#   3055:   {200 ohm|2 kohm|20 kohm|200 kohm|2 Mohm|10 Mohm|100 Mohm}
+#   3065X:  {200 ohm|2 kohm|20 kohm|200 kohm|1 Mohm|10 Mohm|100 Mohm}
+# [SENSe:]{RESistance|FRESistance}:RANGe? [{MIN|MAX|DEF}]
+#
+# [SENSe:]{RESistance|FRESistance}:RANGe:AUTO {OFF|ON|ONCE}
+# [SENSe:]{RESistance|FRESistance}:RANGe:AUTO?
+#
+# 3065X ONLY:
+#   [SENSe:]{RESistance|FRESistance}:AZ[:STATe] {ON|1|OFF|0}
+#   [SENSe:]{RESistance|FRESistance}:AZ[:STATe]?
+#
+#
+# ########## TEMPERATURE ##########
+#
+# [SENSe:]TEMPerature:NULL[:STATe] {ON|1|OFF|0}
+# [SENSe:]TEMPerature:NULL[:STATe]?
+#
+# [SENSe:]TEMPerature:NULL:VALue {<value>|MIN|MAX|DEF}
+#   -1.0E15 to +1.0E15
+# [SENSe:]TEMPerature:NULL:VALue? [{MIN|MAX|
+#
+# [SENSe:]TEMPerature:NULL:VALue:AUTO {ON|1|OFF|0}
+# [SENSe:]TEMPerature:NULL:VALue:AUTO?
+#
 # [SENSe:]TEMPerature:{UDEFine|MDEFine}:{THER|RTD}:TRANsducer:LIST?
-# [SENSe:]TEMPerature:{UDEFine|MDEFine}:{THER|RTD}:TRANsducer     PT100(RTD)/{BITS90|EITS90|JITS90|KITS90|NIT
-# S90|RITS90|SITS90|TITS90}(THER)
+# [SENSe:]TEMPerature:{UDEFine|MDEFine}:{THER|RTD}:TRANsducer
+#   RTD:     {PT100|PT1000}
+#   THER:    {BITS90|EITS90|JITS90|KITS90|NITS90|RITS90|SITS90|TITS90}
+# [SENSe:]TEMPerature:TRANsducer?
+#
 # [SENSe:]TEMPerature:{UDEFine|MDEFine}:{THER|RTD}:TRANsducer:POINt?
-
-# [SENSe:]VOLTage:{AC|DC}:NULL[:STATe]
-# [SENSe:]VOLTage:{AC|DC}:NULL:VALue      -1200 TO +1,200 V
-# [SENSe:]VOLTage:{AC|DC}:NULL:VALue:AUTO
-# [SENSe:]VOLTage[:DC]:IMPedance
-
-# [SENSe:]CAPacitance:NULL[:STATe]
-# [SENSe:]CAPacitance:NULL:VALue          -12 to +12 mF
-# [SENSe:]CAPacitance:NULL:VALue:AUTO
-
-# [SENSe:]CONTinuity:THReshold:VALue      0~2000 OHM
-
+#
+#
+# ########## VOLTAGE ##########
+#
+# [SENSe:]VOLTage:{AC|DC}:NULL[:STATe] {ON|1|OFF|0}
+# [SENSe:]VOLTage:{AC|DC}:NULL[:STATe]?
+#
+# [SENSe:]VOLTage:{AC|DC}:NULL:VALue {<value>|MIN|MAX|DEF}
+#   XXX ALL:        -1200 to +1200 PER SPECIFIC MANUALS
+#   3055/3065X:     DCV NULL range: 1100 to +1100 V
+#                   ACV NULL range:  825 to + 825 V
+#   Disables :AUTO
+# [SENSe:]VOLTage:{AC|DC}:NULL:VALue:AUTO {ON|1|OFF|0}
+# [SENSe:]VOLTage:{AC|DC}:NULL:VALue:AUTO?
+#
+# [SENSe:]VOLTage:{AC|DC}:RANGe {<range>|MIN|MAX|DEF}
+# [SENSe:]VOLTage:{AC|DC}:RANGe? [{MIN|MAX|DEF}]
+#   3045X:      {600 mV|6 V|60 V|600 V|750 V /AC/ or 1000 V /DC/}
+#   3055/3065X: {200 mV|2 V|20 V|200 V|750 V /AC/ or 1000 V /DC/}
+#   Disables :AUTO
+#
+# [SENSe:]VOLTage:{AC|DC}:RANGe:AUTO {OFF|ON|ONCE}
+# [SENSe:]VOLTage:{AC|DC}:RANGe:AUTO?
+#
+# [SENSe:]VOLTage[:DC]:NPLC {<PLC>|MIN|MAX|DEF}
+# [SENSe:]VOLTage[:DC]:NPLC? [{MIN|MAX|
+#   3045X/3055: {0.3|1|10}
+#   3065X:      {100|10|1|0.5|0.05|0.005}
+#
+# [SENSe:]VOLTage[:DC]:IMPedance <impedance>
+#   {10M|10G}
+#   3045X:  600 mV range range only
+#   3055:   200 mV and 2 V ranges only
+#   3065X:  200 mV, 2 V, and 20 V ranges only
+# [SENSe:]VOLTage[:DC]:IMPedance?
+#
+# 3065X ONLY:
+#   [SENSe:]VOLTage[:AC]:BANDwidth {|MIN|MAX|DEF}
+#     {3|20|200}
+#   [SENSe:]VOLTage[:AC]:BANDwidth? [{MIN|MAX|DEF}]
+#
+# 3065X ONLY:
+#   [SENSe:]VOLTage[:DC]:AZ[:STATe] {ON|1|OFF|0}
+#   [SENSe:]VOLTage[:DC]:AZ[:STATe]?
+#
+# 3045X/3055 ONLY:
+#   [SENSe]:VOLTage[:DC]:FILTer[:STATe] {ON|1|OFF|0}
+#   [SENSe]:VOLTage[:DC]:FILTer[:STATe]
+#
+#
+# ########## CAPACITANCE ##########
+#
+# [SENSe:]CAPacitance:NULL[:STATe] {ON|1|OFF|0}
+# [SENSe:]CAPacitance:NULL[:STATe]?
+#
+# [SENSe:]CAPacitance:NULL:VALue {<value>|MIN|MAX|DEF}
+# [SENSe:]CAPacitance:NULL:VALue? [{MIN|MAX|DEF}]
+#   -12 to +12 mF
+#
+# [SENSe:]CAPacitance:NULL:VALue:AUTO {ON|1|OFF|0}
+# [SENSe:]CAPacitance:NULL:VALue:AUTO?
+#
+# [SENSe:]CAPacitance:RANGe {<range>|MIN|MAX|DEF}
+#   3045X/3055: {2nF|20nF|200nF|2uF|20uF|200uF|10000uF}
+#   SDM3065X:   {2nF|20nF|200nF|2uF|20uF|200uF|2mF|20mF|100mF}
+#
+# [SENSe:]CAPacitance:RANGe:AUTO {OFF|ON|ONCE}
+# [SENSe:]CAPacitance:RANGe:AUTO?
+#
+#
+# ########## CONTINUITY ##########
+#
+# [SENSe:]CONTinuity:THReshold:VALue {<value>|MIN|MAX|DEF}
+#   0 to 2000 ohm
+#
+# [SENSe:]CONTinuity:VOLume:STATe{<value>|LOW|MIDDLE|HIGH}
+# [SENSe:]CONTinuity:VOLume:STATe?
+#
+#
+# ########## SYSTEM SUBSYSTEM ##########
+#
 # SYSTem:BEEPer:STATe {ON|1|OFF|0}
+# SYSTem:BEEPer:STATe?
+#
+# TRIGger:SOURce {IMMediate|EXTernal|BUS}
+#   We only support IMMedaiate
+# TRIGger:SOURce?

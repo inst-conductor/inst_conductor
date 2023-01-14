@@ -13,10 +13,14 @@
   * Add buttons to each instrument to open a plotting window or histogram window the
     shows the current measurement
   * Convert everything to global style sheets
-  - Mouse wheel or up/down arrow should move digit at cursor position like a real instrument
+  - Add menu option to set measurement delay in each instrument. Save in inst config file.
+  - Mouse wheel or up/down arrow should move digit at cursor position like a real
+    instrument
   - Write help for each instrument
   - Add overall README file
   - Look into tab focus order
+  - Add way to save window positions and open windows automatically on startup including
+    plot configuration
 
 - Major new features:
   - Support USB connection
@@ -64,6 +68,9 @@
 ** Histogram View **
 
 - Enhancements:
+  - Use display_units for statistics, or at least use engineering exponential notation
+    Look at how SDM does it for capacitance or resistance since those are high dynamic
+    range
   - Show gridlines
   - Cumulative percentage
   - Cumulative distribution
@@ -96,6 +103,7 @@
     or maximum limits set in the application.
 
 - Enhancements:
+  - Is there a way to support OCP?
   - Indicate edit of V/A is in progress and not applied to instrument yet (background or
     font)
   - Show status message when timer is on if timer display is not shown
@@ -113,10 +121,12 @@
 ** SDM **
 
 - Bugs:
+  * Use abs() value for unit determination in display
   * Not handling instrument disconnect
   * If you go into local mode from the panel the UI freezes and won't come back
   * Not all instrument modes are implemented
   * Relative measurements not implemented
+    - DB:REFerence (ACV/DCV)
   * Setting auto range should grey out range radio buttons
 
 - Enhancements:
@@ -128,6 +138,7 @@
     color-blind people
   - Handle 3045X, 3055, and 3065X with different numbers of digits
   - Implement scan card
+  - Limit checking (set min/max and indicate if measurement is outside limits)
 
 
 ** SDS **

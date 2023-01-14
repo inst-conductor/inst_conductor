@@ -63,14 +63,6 @@ async def create_device(resource_name, existing_names=None, **kwargs):
         cls = None
         if len(idn_split) >= 2:
             manufacturer, model, *_ = idn_split
-            # This is a hack to handle a bug with the SDM3055 when it has been
-            # reloaded with the recovery image and loses the model number and
-            # S/N. We will just identify it using the most recent firmware
-            # we know about.
-            if manufacturer == 'Siglent Technologies' and model == ' ':
-                manufacturer, model, serial, firmware = idn_split
-                if firmware == '1.01.01.25':
-                    model = 'SDM3055'
             cls = _DEVICE_MAPPING.get((manufacturer, model), None)
     if cls is None:
         raise UnknownInstrumentType(idn)
