@@ -22,7 +22,7 @@
 ################################################################################
 
 from .device import (Device4882,
-                     ConnectionLost,
+                     ConnectionLost,    # Needed for pass-thru import; leave here
                      InstrumentClosed,
                      NotConnected)
 from .siglent_sdl1000 import InstrumentSiglentSDL1000
@@ -50,22 +50,24 @@ async def create_device(resource_name, existing_names=None, **kwargs):
     """"Query a device for its IDN and create the appropriate instrument class."""
     dev = Device4882(resource_name)
     await dev.connect()
+    inst_cls = None
     if dev._is_fake:
         model = resource_name.replace('FAKE::', '')
         for (manufacturer, inst_name), cls in _DEVICE_MAPPING.items():
             if inst_name == model:
+                inst_cls = _DEVICE_MAPPING.get((manufacturer, model), None)
+                inst_cls = inst_cls.get_fake_instrument_class()
                 break
-        else:
-            raise UnknownInstrumentType(model)
     else:
         idn = await dev.idn()
         idn_split = idn.split(',')
-        cls = None
         if len(idn_split) >= 2:
             manufacturer, model, *_ = idn_split
-            cls = _DEVICE_MAPPING.get((manufacturer, model), None)
-    if cls is None:
+            inst_cls = _DEVICE_MAPPING.get((manufacturer, model), None)
+    if inst_cls is None:
         raise UnknownInstrumentType(idn)
-    new_dev = cls(resource_name, existing_names=existing_names, **kwargs)
+    new_dev = inst_cls(resource_name, existing_names=existing_names,
+                       manufacturer=manufacturer, model=model,
+                       **kwargs)
     await new_dev.connect(reader=dev._reader, writer=dev._writer)
     return new_dev

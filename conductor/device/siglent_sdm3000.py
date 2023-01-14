@@ -68,6 +68,7 @@
 
 import asyncio
 import json
+import logging
 import random
 import re
 
@@ -123,6 +124,11 @@ class InstrumentSiglentSDM3000(Device4882):
             'SDM3065X'
         )
 
+    @classmethod
+    def get_fake_instrument_class(cls):
+        """Return the class of the fake instrument."""
+        return FakeInstrumentSiglentSDM3000
+
     def __init__(self, *args, existing_names=None, **kwargs):
         super().__init__(*args, **kwargs)
         super().init_names('SDM3000', 'SDM', existing_names)
@@ -130,23 +136,17 @@ class InstrumentSiglentSDM3000(Device4882):
     async def connect(self, *args, **kwargs):
         """Connect to the instrument and set it to remote state."""
         await super().connect(*args, **kwargs)
-        if self._is_fake:
-            self._manufacturer = 'Siglent Technologies'
+        idn = await self.idn()
+        idn = idn.split(',')
+        if len(idn) != 4:
+            assert ValueError
+        (self._manufacturer,
+            self._model,
+            self._serial_number,
+            self._firmware_version) = idn
+        if self._model.strip() == '':
+            # Handle my broken SDM3055
             self._model = 'SDM3055'
-            self._serial_number = 'FAKE S/N'
-            self._firmware_version = 'FAKE F/W'
-        else:
-            idn = await self.idn()
-            idn = idn.split(',')
-            if len(idn) != 4:
-                assert ValueError
-            (self._manufacturer,
-             self._model,
-             self._serial_number,
-             self._firmware_version) = idn
-            if self._model.strip() == '':
-                # Handle my broken SDM3055
-                self._model = 'SDM3055'
         if self._manufacturer != 'Siglent Technologies':
             assert ValueError
         if not self._model.startswith('SDM'):
@@ -227,9 +227,9 @@ _SDM_OVERALL_MODES = {
 #       1) The type of the parameter. Options are '.Xf' for a float with a given
 #          number of decimal places, 'd' for an integer, 'b' for a Boolean
 #          (treated the same as 'd' for now), 's' for an arbitrary string,
-#          and 'r' for a radio button, with the variants 'rv', 'ri', 'rr', and 'rc'
-#          for radio buttons that convert RANGE values, and 'rs' that converts
-#          NPLC speeds.
+#          and 'r' for a radio button, with the variants 'rvac', 'rvdc',
+#          'riac', 'ridc', 'rr', and 'rc' for radio buttons that convert RANGE
+#          values, and 'rs' that converts NPLC speeds.
 #       2) A widget name telling which container widgets to enable.
 #       3) A widget name telling which widget contains the actual value to read
 #          or set. It is automatically enabled. For a 'r' radio button, this is
@@ -265,63 +265,90 @@ _SDM_MODE_PARAMS = {  # noqa: E121,E501
         {'widgets': ('FrameRange_Voltage:DC', 'FrameParam1'),
          'mode_name': 'VOLT:DC',
          'params': (
-            ('RANGE',                    'rv', None, 'Range_Voltage:DC_RB_.*'),
+            # ('NULL:STATE',                'b', None, ''), # XXX
+            # ('NULL:VALUE',                'f', None, ''), # XXX
+            # ('NULL:VALUE:AUTO',           'b', None, ''), # XXX
+            ('RANGE',                    'rvdc', None, 'Range_Voltage:DC_RB_.*'),
             ('RANGE:AUTO',                'b', None, 'Range_Voltage:DC_Auto'),
             ('NPLC',                     'rs', 'SpeedLabel', 'Speed_.*'),
-            ('FILTER:STATE',              'b', None, 'DCFilter'),
             ('IMP',                       'r', 'ImpedanceLabel', 'Impedance_.*'),
+            # ('AZ:STATE',                  'b', None, ''), # XXX 3065X
+            ('FILTER:STATE',              'b', None, 'DCFilter'), # xxx 3045x/3055
           )
         },
     ('AC Voltage'):
         {'widgets': ('FrameRange_Voltage:AC', 'FrameParam1'),
          'mode_name': 'VOLT:AC',
          'params': (
-            ('RANGE',                    'rv', None, 'Range_Voltage:AC_RB_.*'),
+            # ('NULL:STATE',                'b', None, ''), # XXX
+            # ('NULL:VALUE',                'f', None, ''), # XXX
+            # ('NULL:VALUE:AUTO',           'b', None, ''), # XXX
+            ('RANGE',                    'rvac', None, 'Range_Voltage:AC_RB_.*'),
             ('RANGE:AUTO',                'b', None, 'Range_Voltage:AC_Auto'),
-            ('NPLC',                     'rs', 'SpeedLabel', 'Speed_.*'),
+            # XXX No NPLC for AC vOLTAGE
+            # ('BANDWIDTH',                 's', None, ''), # XXX 3065X
           )
         },
     ('DC Current'):
         {'widgets': ('FrameRange_Current:DC', 'FrameParam1'),
          'mode_name': 'CURR:DC',
          'params': (
-            ('RANGE',                    'ri', None, 'Range_Current:DC_RB_.*'),
+            # ('NULL:STATE',                'b', None, ''), # XXX
+            # ('NULL:VALUE',                'f', None, ''), # XXX
+            # ('NULL:VALUE:AUTO',           'b', None, ''), # XXX
+            ('RANGE',                    'ridc', None, 'Range_Current:DC_RB_.*'),
             ('RANGE:AUTO',                'b', None, 'Range_Current:DC_Auto'),
             ('NPLC',                     'rs', 'SpeedLabel', 'Speed_.*'),
-            ('FILTER:STATE',              'b', None, 'DCFilter'),
+            # ('AZ:STATE',                  'b', None, ''), # XXX 3065X
+            ('FILTER:STATE',              'b', None, 'DCFilter'), # XXX 3045X/3055
           )
         },
     ('AC Current'):
         {'widgets': ('FrameRange_Current:AC', 'FrameParam1'),
          'mode_name': 'CURR:AC',
          'params': (
-            ('RANGE',                    'ri', None, 'Range_Current:AC_RB_.*'),
+            # ('NULL:STATE',                'b', None, ''), # XXX
+            # ('NULL:VALUE',                'f', None, ''), # XXX
+            # ('NULL:VALUE:AUTO',           'b', None, ''), # XXX
+            ('RANGE',                    'riac', None, 'Range_Current:AC_RB_.*'),
             ('RANGE:AUTO',                'b', None, 'Range_Current:AC_Auto'),
-            ('NPLC',                     'rs', 'SpeedLabel', 'Speed_.*'),
+            # XXX No NPLC for AC Current
+            # ('BANDWIDTH',                 's', None, ''), # XXX 3065X
           )
         },
     ('2-W Resistance'):
         {'widgets': ('FrameRange_Resistance:2W', 'FrameParam1'),
          'mode_name': 'RES',
          'params': (
+            # ('NULL:STATE',                'b', None, ''), # XXX
+            # ('NULL:VALUE',                'f', None, ''), # XXX
+            # ('NULL:VALUE:AUTO',           'b', None, ''), # XXX
             ('RANGE',                    'rr', None, 'Range_Resistance:2W_RB_.*'),
             ('RANGE:AUTO',                'b', None, 'Range_Resistance:2W_Auto'),
             ('NPLC',                     'rs', 'SpeedLabel', 'Speed_.*'),
+            # ('AZ:STATE',                  'b', None, ''), # XXX 3065X
           )
         },
     ('4-W Resistance'):
         {'widgets': ('FrameRange_Resistance:4W', 'FrameParam1'),
          'mode_name': 'FRES',
          'params': (
+            # ('NULL:STATE',                'b', None, ''), # XXX
+            # ('NULL:VALUE',                'f', None, ''), # XXX
+            # ('NULL:VALUE:AUTO',           'b', None, ''), # XXX
             ('RANGE',                    'rr', None, 'Range_Resistance:4W_RB_.*'),
             ('RANGE:AUTO',                'b', None, 'Range_Resistance:4W_Auto'),
             ('NPLC',                     'rs', 'SpeedLabel', 'Speed_.*'),
+            # ('AZ:STATE',                  'b', None, ''), # XXX 3065X
           )
         },
     ('Capacitance'):
         {'widgets': ('FrameRange_Capacitance',),
          'mode_name': 'CAP',
          'params': (
+            # ('NULL:STATE',                'b', None, ''), # XXX
+            # ('NULL:VALUE',                'f', None, ''), # XXX
+            # ('NULL:VALUE:AUTO',           'b', None, ''), # XXX
             ('RANGE',                    'rc', None, 'Range_Capacitance_RB_.*'),
             ('RANGE:AUTO',                'b', None, 'Range_Capacitance_Auto'),
           )
@@ -330,37 +357,395 @@ _SDM_MODE_PARAMS = {  # noqa: E121,E501
         {'widgets': ('!FrameRange_Voltage:DC',),
          'mode_name': 'CONT',
          'params': (
+            #  ('THRESHOLD:VALUE',           'f', None, ''), # XXX
+            #  ('VOLUME:STATE',              's', None, ''), # XXX Really r
           )
         },
     ('Diode'):
         {'widgets': ('!FrameRange_Voltage:DC',),
          'mode_name': 'DIOD',
          'params': (
+            #  ('THRESHOLD:VALUE',           'f', None, ''), # XXX
+            #  ('VOLUME:STATE',              's', None, ''), # XXX Really r
           )
         },
     ('Frequency'):
         {'widgets': ('FrameRange_Frequency:Voltage',),
          'mode_name': 'FREQ',
          'params': (
-            ('VOLT:RANGE',                    'rv', None, 'Range_Frequency:Voltage_RB_.*'),
-            ('VOLT:RANGE:AUTO',                'b', None, 'Range_Frequency:Voltage_Auto'),
+            # ('NULL:STATE',                 'b', None, ''), # XXX
+            # ('NULL:VALUE',                 'f', None, ''), # XXX
+            # ('NULL:VALUE:AUTO',            'b', None, ''), # XXX
+            ('VOLT:RANGE',                 'rvac', None, 'Range_Frequency:Voltage_RB_.*'), # XXX rvac?
+            ('VOLT:RANGE:AUTO',            'b', None, 'Range_Frequency:Voltage_Auto'),
+            # ('APERTURE',                   'r', None, ''), # XXX 3065X
           )
         },
     ('Period'):
         {'widgets': ('FrameRange_Period:Voltage',),
          'mode_name': 'PER',
          'params': (
-            ('VOLT:RANGE',                    'rv', None, 'Range_Period:Voltage_RB_.*'),
+            # ('NULL:STATE',                'b', None, ''), # XXX
+            # ('NULL:VALUE',                'f', None, ''), # XXX
+            # ('NULL:VALUE:AUTO',           'b', None, ''), # XXX
+            ('VOLT:RANGE',                    'rvac', None, 'Range_Period:Voltage_RB_.*'), # XXX rvac?
             ('VOLT:RANGE:AUTO',                'b', None, 'Range_Period:Voltage_Auto'),
+            # ('APERTURE',                    'r', None, ''), # XXX 3065X
           )
         },
     ('Temperature'):
         {'widgets': ('!FrameRange_Voltage:DC',),
          'mode_name': 'TEMP',
          'params': (
+            # ('NULL:STATE',                'b', None, ''), # XXX
+            # ('NULL:VALUE',                'f', None, ''), # XXX
+            # ('NULL:VALUE:AUTO',           'b', None, ''), # XXX
+            # ('UDEFINE:THER:TRAN:LIST',    's', None, ''), # XXX
+            # ('UDEFINE:RTD:TRAN:LIST',     's', None, ''), # XXX
+            # ('MDEFINE:THER:TRAN:LIST',    's', None, ''), # XXX
+            # ('MDEFINE:RTD:TRAN:LIST',     's', None, ''), # XXX
+            # ('UDEFINE:THER:TRAN:POINT',   's', None, ''), # XXX
+            # ('UDEFINE:RTD:TRAN:POINT',    's', None, ''), # XXX
+            # ('MDEFINE:THER:TRAN:POINT',   's', None, ''), # XXX
+            # ('MDEFINE:RTD:TRAN:POINT',    's', None, ''), # XXX
           )
         },
 }
+
+# RANGE parameter conversions
+
+_RANGE_VAC_SCPI_READ_TO_WRITE = {
+    'SDM3045X': {
+           0.6:  '600MV',
+           6.0:     '6V',
+          60.0:    '60V',
+         600.0:   '600V',
+         750.0:   '750V',
+    },
+    'SDM3055': {
+           0.2:  '200MV',
+           2.0:     '2V',
+          20.0:    '20V',
+         200.0:   '200V',
+         750.0:   '750V',
+    },
+    'SDM3065X': {
+           0.2:  '200MV',
+           2.0:     '2V',
+          20.0:    '20V',
+         200.0:   '200V',
+         750.0:   '750V',
+    }
+}
+_RANGE_VAC_SCPI_WRITE_TO_DISP = {
+    'SDM3045X': {
+        '600MV': '600 mV',
+           '6V':    '6 V',
+          '60V':   '60 V',
+         '600V':  '600 V',
+         '750V':  '750 V',
+    },
+    'SDM3055': {
+        '200MV': '200 mV',
+           '2V':    '2 V',
+          '20V':   '20 V',
+         '200V':  '200 V',
+         '750V':  '750 V',
+    },
+    'SDM3065X': {
+        '200MV': '200 mV',
+           '2V':    '2 V',
+          '20V':   '20 V',
+         '200V':  '200 V',
+         '750V':  '750 V',
+    },
+
+}
+_RANGE_VAC_DISP_TO_SCPI_WRITE = {model: {value: key for key, value in x.items()}
+                                   for model, x in _RANGE_VAC_SCPI_WRITE_TO_DISP.items()}
+
+_RANGE_VDC_SCPI_READ_TO_WRITE = {
+    'SDM3045X': {
+           0.6:  '600MV',
+           6.0:     '6V',
+          60.0:    '60V',
+         600.0:   '600V',
+        1000.0:  '1000V',
+    },
+    'SDM3055': {
+           0.2:  '200MV',
+           2.0:     '2V',
+          20.0:    '20V',
+         200.0:   '200V',
+        1000.0:  '1000V',
+    },
+    'SDM3065X': {
+           0.2:  '200MV',
+           2.0:     '2V',
+          20.0:    '20V',
+         200.0:   '200V',
+        1000.0:  '1000V',
+    }
+}
+_RANGE_VDC_SCPI_WRITE_TO_DISP = {
+    'SDM3045X': {
+        '600MV': '600 mV',
+           '6V':    '6 V',
+          '60V':   '60 V',
+         '600V':  '600 V',
+        '1000V': '1000 V'
+    },
+    'SDM3055': {
+        '200MV': '200 mV',
+           '2V':    '2 V',
+          '20V':   '20 V',
+         '200V':  '200 V',
+        '1000V': '1000 V'
+    },
+    'SDM3065X': {
+        '200MV': '200 mV',
+           '2V':    '2 V',
+          '20V':   '20 V',
+         '200V':  '200 V',
+        '1000V': '1000 V'
+    },
+}
+_RANGE_VDC_DISP_TO_SCPI_WRITE = {model: {value: key for key, value in x.items()}
+                                   for model, x in _RANGE_VDC_SCPI_WRITE_TO_DISP.items()}
+
+
+_RANGE_IAC_SCPI_READ_TO_WRITE = {
+    'SDM3045X': {
+         0.06:   '60MA',
+         0.6:    '600MA',
+         6.0:    '6A',
+        10.0:    '10A'
+    },
+    'SDM3055': {
+         0.02:   '20MA',
+         0.2:    '200MA',
+         2.0:    '2A',
+        10.0:    '10A'
+    },
+    'SDM3065X': {
+         0.0002: '200UA',
+         0.002:  '2MA',
+         0.02:   '20MA',
+         0.2:    '200MA',
+         2.0:    '2A',
+        10.0:    '10A'
+    }
+}
+_RANGE_IAC_SCPI_WRITE_TO_DISP = {
+    'SDM3045X': {
+         '60MA':  '60 mA',
+        '600MA': '600 mA',
+           '6A':   '6 A',
+          '10A':  '10 A'
+
+    },
+    'SDM3055': {
+        '200UA': '200 \u00B5A',
+          '2MA':   '2 mA',
+         '20MA':  '20 mA',
+        '200MA': '200 mA',
+           '2A':    '2 A',
+          '10A':    '10 A'
+    },
+    'SDM3065X': {
+        '200UA': '200 \u00B5A',
+          '2MA':   '2 mA',
+         '20MA':  '20 mA',
+        '200MA': '200 mA',
+           '2A':    '2 A',
+          '10A':    '10 A'
+    }
+}
+_RANGE_IAC_DISP_TO_SCPI_WRITE = {model: {value: key for key, value in x.items()}
+                                   for model, x in _RANGE_IAC_SCPI_WRITE_TO_DISP.items()}
+
+_RANGE_IDC_SCPI_READ_TO_WRITE = {
+    'SDM3045X': {
+         0.0006: '600UA',
+         0.006:  '6MA',
+         0.06:   '60MA',
+         0.6:    '600MA',
+         6.0:    '6A',
+        10.0:    '10A'
+    },
+    'SDM3055': {
+         0.0002: '200UA',
+         0.002:  '2MA',
+         0.02:   '20MA',
+         0.2:    '200MA',
+         2.0:    '2A',
+        10.0:    '10A'
+    },
+    'SDM3065X': {
+         0.0002: '200UA',
+         0.002:  '2MA',
+         0.02:   '20MA',
+         0.2:    '200MA',
+         2.0:    '2A',
+        10.0:    '10A'
+    }
+}
+_RANGE_IDC_SCPI_WRITE_TO_DISP = {
+    'SDM3045X': {
+        '600UA': '600 \u00B5A',
+          '6MA':   '6 mA',
+         '60MA':  '60 mA',
+        '600MA': '600 mA',
+           '6A':   '6 A',
+          '10A':  '10 A'
+    },
+    'SDM3055': {
+        '200UA': '200 \u00B5A',
+          '2MA':   '2 mA',
+         '20MA':  '20 mA',
+        '200MA': '200 mA',
+           '2A':    '2 A',
+          '10A':    '10 A'
+    },
+    'SDM3065X': {
+        '200UA': '200 \u00B5A',
+          '2MA':   '2 mA',
+         '20MA':  '20 mA',
+        '200MA': '200 mA',
+           '2A':    '2 A',
+          '10A':    '10 A'
+    }
+}
+_RANGE_IDC_DISP_TO_SCPI_WRITE = {model: {value: key for key, value in x.items()}
+                                   for model, x in _RANGE_IDC_SCPI_WRITE_TO_DISP.items()}
+
+_RANGE_R_SCPI_READ_TO_WRITE = {
+    'SDM3045X': {
+              600.0:  '600OHM',
+             6000.0:   '6KOHM',
+            60000.0:  '60KOHM',
+           600000.0: '600KOHM',
+          6000000.0:   '6MOHM',
+         60000000.0:  '60MOHM',
+        100000000.0: '100MOHM'
+    },
+    'SDM3055': {
+              200.0:  '200OHM',
+             2000.0:   '2KOHM',
+            20000.0:  '20KOHM',
+           200000.0: '200KOHM',
+          2000000.0:   '2MOHM',
+         10000000.0:  '10MOHM',
+        100000000.0: '100MOHM'
+    },
+    'SDM3065X': {
+              200.0:  '200OHM',
+             2000.0:   '2KOHM',
+            20000.0:  '20KOHM',
+           200000.0: '200KOHM',
+          1000000.0:   '1MOHM',
+         10000000.0:  '10MOHM',
+        100000000.0: '100MOHM'
+
+    }
+}
+_RANGE_R_SCPI_WRITE_TO_DISP = {
+    'SDM3045X': {
+         '600OHM':  '600 \u2126',
+          '6KOHM':   '6 k\u2126',
+         '60KOHM':  '60 k\u2126',
+        '600KOHM': '600 k\u2126',
+          '6MOHM':   '6 M\u2126',
+         '60MOHM':  '60 M\u2126',
+        '100MOHM': '100 M\u2126'
+
+    },
+    'SDM3055': {
+         '200OHM':  '200 \u2126',
+          '2KOHM':   '2 k\u2126',
+         '20KOHM':  '20 k\u2126',
+        '200KOHM': '200 k\u2126',
+          '2MOHM':   '2 M\u2126',
+         '10MOHM':  '10 M\u2126',
+        '100MOHM': '100 M\u2126'
+    },
+    'SDM3065X': {
+         '200OHM':  '200 \u2126',
+          '2KOHM':   '2 k\u2126',
+         '20KOHM':  '20 k\u2126',
+        '200KOHM': '200 k\u2126',
+          '1MOHM':   '1 M\u2126',
+         '10MOHM':  '10 M\u2126',
+        '100MOHM': '100 M\u2126'
+    }
+}
+_RANGE_R_DISP_TO_SCPI_WRITE = {model: {value: key for key, value in x.items()}
+                                 for model, x in _RANGE_R_SCPI_WRITE_TO_DISP.items()}
+
+_RANGE_C_SCPI_READ_TO_WRITE = {
+    'SDM3045X': {
+        0.000000002: '2NF',
+        0.000000020: '20NF',
+        0.000000200: '200NF',
+        0.000002000: '2UF',
+        0.000020000: '20UF',
+        0.000200000: '200UF',
+        0.010000000: '10000UF'
+    },
+    'SDM3055': {
+        0.000000002: '2NF',
+        0.000000020: '20NF',
+        0.000000200: '200NF',
+        0.000002000: '2UF',
+        0.000020000: '20UF',
+        0.000200000: '200UF',
+        0.010000000: '10000UF'
+    },
+    'SDM3065X': {
+        0.000000002: '2NF',
+        0.000000020: '20NF',
+        0.000000200: '200NF',
+        0.000002000: '2UF',
+        0.000020000: '20UF',
+        0.000200000: '200UF',
+        0.002000000: '2MF',
+        0.020000000: '20MF',
+        0.100000000: '100MF'
+    }
+}
+_RANGE_C_SCPI_WRITE_TO_DISP = {
+    'SDM3045X': {
+            '2NF':     '2 nF',
+           '20NF':    '20 nF',
+          '200NF':   '200 nF',
+            '2UF':     '2 \u00B5F',
+           '20UF':    '20 \u00B5F',
+          '200UF':   '200 \u00B5F',
+        '10000UF': '10000 \u00B5F'
+    },
+    'SDM3055': {
+            '2NF':     '2 nF',
+           '20NF':    '20 nF',
+          '200NF':   '200 nF',
+            '2UF':     '2 \u00B5F',
+           '20UF':    '20 \u00B5F',
+          '200UF':   '200 \u00B5F',
+        '10000UF': '10000 \u00B5F'
+    },
+    'SDM3065X': {
+            '2NF':     '2 nF',
+           '20NF':    '20 nF',
+          '200NF':   '200 nF',
+            '2UF':     '2 \u00B5F',
+           '20UF':    '20 \u00B5F',
+          '200UF':   '200 \u00B5F',
+            '2MF':     '2 mF',
+           '20MF':    '20 mF',
+          '100MF':   '100 mF'
+    }
+}
+_RANGE_C_DISP_TO_SCPI_WRITE = {model: {value: key for key, value in x.items()}
+                                 for model, x in _RANGE_C_SCPI_WRITE_TO_DISP.items()}
 
 
 # This class encapsulates the main SDM configuration widget.
@@ -417,63 +802,33 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                         if param0 in self._param_state[idx]:
                             # Modes often ask for the same data, no need to retrieve it twice
                             continue
-                        if self._inst._is_fake:
-                            if param0 == ':TRIGGER:SOURCE':
-                                val = 'MANUAL' # XXX
-                            elif param0 == ':FUNCTION':
-                                val = random.choice((
-                                    'VOLT:DC', 'VOLT:AC', 'CURR:DC', 'CURR:AC',
-                                    'RES', 'FRES',
-                                    # 'CAP', 'CONT',
-                                    # 'DIOD', 'FREQ', 'PER', 'TEMP' XXX
-                                ))
-                            elif param0.endswith(':IMP'):
-                                val = random.choice(('10M', '10G'))
-                        else:
-                            val = await self._inst.query(f'{param0}?')
+                        val = await self._inst.query(f'{param0}?')
                         param_type = param_spec[1]
                         if param_type[0] == '.': # Handle .3f
                             param_type = param_type[-1]
                         match param_type:
                             case 'f': # Float
-                                if self._inst._is_fake:
-                                    val = random.random()
-                                else:
-                                    val = float(val)
+                                val = float(val)
                             case 'b' | 'd': # Boolean or Decimal
-                                if self._inst._is_fake:
-                                    val = random.randint(0, 1)
-                                else:
-                                    val = int(float(val))
+                                val = int(float(val))
                             case 's' | 'r': # String or radio button
                                 # The SDM3000 wraps function strings in double qoutes for
                                 # some reason
                                 val = val.strip('"').upper()
-                            case 'rv': # Voltage range
-                                if self._inst._is_fake:
-                                    val = random.choice(
-                                        list(self._RANGE_V_SCPI_READ_TO_WRITE.keys()))
-                                val = self._range_v_scpi_read_to_scpi_write(val)
-                            case 'ri': # Current range
-                                if self._inst._is_fake:
-                                    val = random.choice(
-                                        list(self._RANGE_I_SCPI_READ_TO_WRITE.keys()))
-                                val = self._range_i_scpi_read_to_scpi_write(val)
+                            case 'rvac': # Voltage range
+                                val = self._range_vac_scpi_read_to_scpi_write(val)
+                            case 'rvdc': # Voltage range
+                                val = self._range_vdc_scpi_read_to_scpi_write(val)
+                            case 'riac': # Current range
+                                val = self._range_iac_scpi_read_to_scpi_write(val)
+                            case 'ridc': # Current range
+                                val = self._range_idc_scpi_read_to_scpi_write(val)
                             case 'rr': # Resistance range
-                                if self._inst._is_fake:
-                                    val = random.choice(
-                                        list(self._RANGE_R_SCPI_READ_TO_WRITE.keys()))
                                 val = self._range_r_scpi_read_to_scpi_write(val)
                             case 'rc': # Capacitance range
-                                if self._inst._is_fake:
-                                    val = random.choice(
-                                        list(self._RANGE_C_SCPI_READ_TO_WRITE.keys()))
                                 val = self._range_c_scpi_read_to_scpi_write(val)
                             case 'rs': # Speed
-                                if self._inst._is_fake:
-                                    val = random.choice((0.3, 1., 10.))
-                                else:
-                                    val = self._speed_scpi_read_to_scpi_write(val)
+                                val = self._speed_scpi_read_to_scpi_write(val)
                             case _:
                                 assert False, f'Unknown param_type {param_type}'
                         self._param_state[idx][param0] = val
@@ -595,14 +950,23 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
             'Temperature':      {'name':   'Temperature', # XXX
                                  'unit':   'K',
                                  'format': '13.6f',
+                                 'display_units': (
+                                     (None, 1,    '13.6f', 'K'), # XXX
+                                 ),
                                  'val':    None},
             'Continuity':       {'name':   'Continuity', # XXX
                                  'unit':   '\u2126',
                                  'format': '13.6f',
+                                 'display_units': (
+                                     (None, 1,    '13.6f', '\u2126'), # XXX
+                                 ),
                                  'val':    None},
             'Diode':            {'name':   'Diode', # XXX
-                                 'unit':   'K',
+                                 'unit':   'V',
                                  'format': '13.6f',
+                                 'display_units': (
+                                     (None, 1,    '13.6f', 'V'), # XXX
+                                 ),
                                  'val':    None},
         }
 
@@ -634,10 +998,7 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                     self._last_measurement_param_state = (
                         await self._update_instrument(paramset_num,
                                                       self._last_measurement_param_state))
-                    if self._inst._is_fake:
-                        val = random.random()
-                    else:
-                        val = float(await self._inst.query('READ?'))
+                    val = float(await self._inst.query('READ?'))
                     if abs(val) == 9.9e37:
                         val = None
                     mode = self._scpi_to_mode(self._param_state[paramset_num][':FUNCTION'])
@@ -805,11 +1166,11 @@ class InstrumentSiglentSDM3000ConfigureWidget(ConfigureWidgetBase):
                              '2-W Resistance',
                              '4-W Resistance'),
                             ('Capacitance',
-                            #  'Continuity',
-                            #  'Diode',
+                             'Continuity',
+                             'Diode',
                              'Frequency',
                              'Period',
-                            #  'Temperature'
+                             'Temperature'
                              )):
                 layoutv = QVBoxLayout()
                 layoutv.setSpacing(10)
@@ -1429,135 +1790,77 @@ Connected to {self._inst.resource_name}
             case _:
                 assert False, param
 
-    # RANGE parameter conversions
+    def _range_vac_scpi_read_to_scpi_write(self, param):
+        """Convert an AC Voltage SCPI read range to a Voltage write range."""
+        return _RANGE_VAC_SCPI_READ_TO_WRITE[self._inst._model][float(param)]
 
-    _RANGE_V_SCPI_READ_TO_WRITE = {
-           0.2:  '200MV',
-           2.0:    '2V',
-          20.0:   '20V',
-         200.0:  '200V',
-         750.0:  '750V',
-        1000.0: '1000V'
-    }
-    _RANGE_V_SCPI_WRITE_TO_DISP = {
-         '200MV': '200 mV',
-           '2V':    '2 V',
-          '20V':   '20 V',
-         '200V':  '200 V',
-         '750V':  '750 V',
-        '1000V': '1000 V'
-    }
-    _RANGE_V_DISP_TO_SCPI_WRITE = {value: key for key, value in
-                                   _RANGE_V_SCPI_WRITE_TO_DISP.items()}
+    def _range_vdc_scpi_read_to_scpi_write(self, param):
+        """Convert a DC Voltage SCPI read range to a Voltage write range."""
+        return _RANGE_VDC_SCPI_READ_TO_WRITE[self._inst._model][float(param)]
 
-    _RANGE_I_SCPI_READ_TO_WRITE = {
-         0.0002: '200UA',
-         0.002:    '2MA',
-         0.02:    '20MA',
-         0.2:    '200MA',
-         2.0:      '2A',
-        10.0:     '10A'
-    }
-    _RANGE_I_SCPI_WRITE_TO_DISP = {
-        '200UA': '200 \u00B5A',
-          '2MA':   '2 mA',
-         '20MA':  '20 mA',
-        '200MA': '200 mA',
-         '2A':     '2 A',
-        '10A':    '10 A'
-    }
-    _RANGE_I_DISP_TO_SCPI_WRITE = {value: key for key, value in
-                                   _RANGE_I_SCPI_WRITE_TO_DISP.items()}
+    def _range_vac_scpi_write_to_disp(self, range):
+        """Convert an AC Voltage SCPI write range to a display range."""
+        return _RANGE_VAC_SCPI_WRITE_TO_DISP[self._inst._model][range]
 
-    _RANGE_R_SCPI_READ_TO_WRITE = {
-              200.0: '200OHM',
-             2000.0:   '2KOHM',
-            20000.0:  '20KOHM',
-           200000.0: '200KOHM',
-          2000000.0:   '2MOHM',
-         10000000.0:  '10MOHM',
-        100000000.0: '100MOHM'
-    }
-    _RANGE_R_SCPI_WRITE_TO_DISP = {
-         '200OHM': '200 \u2126',
-          '2KOHM':   '2 k\u2126',
-         '20KOHM':  '20 k\u2126',
-        '200KOHM': '200 k\u2126',
-          '2MOHM':   '2 M\u2126',
-         '10MOHM':  '10 M\u2126',
-        '100MOHM': '100 M\u2126'
-    }
-    _RANGE_R_DISP_TO_SCPI_WRITE = {value: key for key, value in
-                                   _RANGE_R_SCPI_WRITE_TO_DISP.items()}
+    def _range_vdc_scpi_write_to_disp(self, range):
+        """Convert a DC Voltage SCPI write range to a display range."""
+        return _RANGE_VDC_SCPI_WRITE_TO_DISP[self._inst._model][range]
 
-    _RANGE_C_SCPI_READ_TO_WRITE = {
-        0.000000002: '2NF',
-        0.000000020: '20NF',
-        0.000000200: '200NF',
-        0.000002000: '2UF',
-        0.000020000: '20UF',
-        0.000200000: '200UF',
-        0.010000000: '10000UF'
-    }
-    _RANGE_C_SCPI_WRITE_TO_DISP = {
-            '2NF':     '2 nF',
-           '20NF':    '20 nF',
-          '200NF':   '200 nF',
-            '2UF':     '2 \u00B5F',
-           '20UF':    '20 \u00B5F',
-          '200UF':   '200 \u00B5F',
-        '10000UF': '10000 \u00B5F'
-    }
-    _RANGE_C_DISP_TO_SCPI_WRITE = {value: key for key, value in
-                                   _RANGE_C_SCPI_WRITE_TO_DISP.items()}
+    def _range_vac_disp_to_scpi_write(self, range):
+        """Convert an AC Voltage display range to a SCPI write range."""
+        return _RANGE_VAC_DISP_TO_SCPI_WRITE[self._inst._model][range]
 
-    def _range_v_scpi_read_to_scpi_write(self, param):
-        """Convert a Voltage SCPI read range to a Voltage write range."""
-        return self._RANGE_V_SCPI_READ_TO_WRITE[float(param)]
+    def _range_vdc_disp_to_scpi_write(self, range):
+        """Convert a DC Voltage display range to a SCPI write range."""
+        return _RANGE_VDC_DISP_TO_SCPI_WRITE[self._inst._model][range]
 
-    def _range_v_scpi_write_to_disp(self, range):
-        """Convert a Voltage SCPI write range to a display range."""
-        return self._RANGE_V_SCPI_WRITE_TO_DISP[range]
+    def _range_iac_scpi_read_to_scpi_write(self, param):
+        """Convert an AC Current SCPI read range to a Current write range."""
+        return _RANGE_IAC_SCPI_READ_TO_WRITE[self._inst._model][float(param)]
 
-    def _range_v_disp_to_scpi_write(self, range):
-        """Convert a Voltage display range to a SCPI write range."""
-        return self._RANGE_V_DISP_TO_SCPI_WRITE[range]
+    def _range_idc_scpi_read_to_scpi_write(self, param):
+        """Convert a DC Current SCPI read range to a Current write range."""
+        return _RANGE_IDC_SCPI_READ_TO_WRITE[self._inst._model][float(param)]
 
-    def _range_i_scpi_read_to_scpi_write(self, param):
-        """Convert a Current SCPI read range to a SCPI write range."""
-        return self._RANGE_I_SCPI_READ_TO_WRITE[float(param)]
+    def _range_iac_scpi_write_to_disp(self, range):
+        """Convert an AC Current SCPI write range to a display range."""
+        return _RANGE_IAC_SCPI_WRITE_TO_DISP[self._inst._model][range]
 
-    def _range_i_scpi_write_to_disp(self, range):
-        """Convert a Current SCPI write range to a display range."""
-        return self._RANGE_I_SCPI_WRITE_TO_DISP[range]
+    def _range_idc_scpi_write_to_disp(self, range):
+        """Convert a DC Current SCPI write range to a display range."""
+        return _RANGE_IDC_SCPI_WRITE_TO_DISP[self._inst._model][range]
 
-    def _range_i_disp_to_scpi_write(self, range):
-        """Convert a Current display range to a SCPI write range."""
-        return self._RANGE_I_DISP_TO_SCPI_WRITE[range]
+    def _range_iac_disp_to_scpi_write(self, range):
+        """Convert an AC Current display range to a SCPI write range."""
+        return _RANGE_IAC_DISP_TO_SCPI_WRITE[self._inst._model][range]
+
+    def _range_idc_disp_to_scpi_write(self, range):
+        """Convert a DC Current display range to a SCPI write range."""
+        return _RANGE_IDC_DISP_TO_SCPI_WRITE[self._inst._model][range]
 
     def _range_r_scpi_read_to_scpi_write(self, param):
         """Convert a Resistance SCPI read range to a SCPI write range."""
-        return self._RANGE_R_SCPI_READ_TO_WRITE[float(param)]
+        return _RANGE_R_SCPI_READ_TO_WRITE[self._inst._model][float(param)]
 
     def _range_r_scpi_write_to_disp(self, range):
         """Convert a Resistance SCPI write range to a display range."""
-        return self._RANGE_R_SCPI_WRITE_TO_DISP[range]
+        return _RANGE_R_SCPI_WRITE_TO_DISP[self._inst._model][range]
 
     def _range_r_disp_to_scpi_write(self, range):
         """Convert a Resistance display range to a SCPI write range."""
-        return self._RANGE_R_DISP_TO_SCPI_WRITE[range]
+        return _RANGE_R_DISP_TO_SCPI_WRITE[self._inst._model][range]
 
     def _range_c_scpi_read_to_scpi_write(self, param):
         """Convert a Capacitance SCPI read range to a SCPI write range."""
-        return self._RANGE_C_SCPI_READ_TO_WRITE[float(param)]
+        return _RANGE_C_SCPI_READ_TO_WRITE[self._inst._model][float(param)]
 
     def _range_c_scpi_write_to_disp(self, range):
         """Convert a Capacitance SCPI write range to a display range."""
-        return self._RANGE_C_SCPI_WRITE_TO_DISP[range]
+        return _RANGE_C_SCPI_WRITE_TO_DISP[self._inst._model][range]
 
     def _range_c_disp_to_scpi_write(self, range):
         """Convert a Capacitance display range to a SCPI write range."""
-        return self._RANGE_C_DISP_TO_SCPI_WRITE[range]
+        return _RANGE_C_DISP_TO_SCPI_WRITE[self._inst._model][range]
 
     def _speed_scpi_read_to_scpi_write(self, param):
         """Convert a Speed SCPI read to a SCPI write."""
@@ -1752,11 +2055,16 @@ Connected to {self._inst.resource_name}
                         if int(val*dec10+.5) != int(widget.value()*dec10+.5):
                             widget_val = float(widget.value())
                             new_param_state[full_scpi_cmd] = widget_val
-                    case 'r' | 'rv' | 'ri' | 'rr' | 'rc' | 'rs': # Radio button
-                        if param_type == 'rv':
-                            val = self._range_v_scpi_write_to_disp(val)
-                        elif param_type == 'ri':
-                            val = self._range_i_scpi_write_to_disp(val)
+                    case 'r' | 'rvac' | 'rvdc' | 'riac' | 'ridc' | 'rr' | 'rc' | 'rs':
+                        # Radio button
+                        if param_type == 'rvac':
+                            val = self._range_vac_scpi_write_to_disp(val)
+                        if param_type == 'rvdc':
+                            val = self._range_vdc_scpi_write_to_disp(val)
+                        elif param_type == 'riac':
+                            val = self._range_iac_scpi_write_to_disp(val)
+                        elif param_type == 'ridc':
+                            val = self._range_idc_scpi_write_to_disp(val)
                         elif param_type == 'rr':
                             val = self._range_r_scpi_write_to_disp(val)
                         elif param_type == 'rc':
@@ -1916,7 +2224,7 @@ Connected to {self._inst.resource_name}
 # 3065X ONLY:
 #   [SENSe:]{FREQuency|PERiod}:APERture {<value>|MIN|MAX|DEF}
 #     {1ms|10ms|100ms|1s}
-#   [SENSe:]{FREQuency|PERiod}:APERture ? [{MIN|MAX|DEF}]
+#   [SENSe:]{FREQuency|PERiod}:APERture? [{MIN|MAX|DEF}]
 #
 #
 # ########## RESISTANCE/FRESISTANCE ##########
@@ -1969,6 +2277,8 @@ Connected to {self._inst.resource_name}
 # [SENSe:]TEMPerature:TRANsducer?
 #
 # [SENSe:]TEMPerature:{UDEFine|MDEFine}:{THER|RTD}:TRANsducer:POINt?
+#
+#   See UNIT:TEMP
 #
 #
 # ########## VOLTAGE ##########
@@ -2047,6 +2357,21 @@ Connected to {self._inst.resource_name}
 # [SENSe:]CONTinuity:VOLume:STATe{<value>|LOW|MIDDLE|HIGH}
 # [SENSe:]CONTinuity:VOLume:STATe?
 #
+#   See SYSTEM:BEEPER
+#
+#
+# ########## DIODE ##########
+#
+# None of these are listed in the manuals!
+#
+# [SENSe:]DIODe:THReshold:VALue {<value>|MIN|MAX|DEF}
+#   0 to 4 V
+#
+# [SENSe:]DIODe:VOLume:STATe{<value>|LOW|MIDDLE|HIGH}
+# [SENSe:]DIODe:VOLume:STATe?
+#
+#   See SYSTEM:BEEPER
+#
 #
 # ########## SYSTEM SUBSYSTEM ##########
 #
@@ -2056,3 +2381,184 @@ Connected to {self._inst.resource_name}
 # TRIGger:SOURce {IMMediate|EXTernal|BUS}
 #   We only support IMMedaiate
 # TRIGger:SOURce?
+#
+# UNIT:TEMP {C|F|K}
+# UNIT:TEMP?
+
+
+class FakeInstrumentSiglentSDM3000(InstrumentSiglentSDM3000):
+    """Controller for internally-faked SDM3000-series devices."""
+
+    def __init__(self, *args, existing_names=None, manufacturer=None, model=None,
+                 **kwargs):
+        super().__init__(*args, **kwargs)
+        super().init_names('SDM3000', 'SDM', existing_names)
+        self._manufacturer = manufacturer
+        self._model = model
+        self._serial_number = '0123456789'
+        self._firmware_version = 'FW1.2.3.4'
+        self._hardware_version = 'HW1.2.3.4'
+        self._is_fake = True
+        self._logger = logging.getLogger(f'ic.fake')
+
+        self._config = {
+            ':TRIGGER:SOURCE': 'IMM',
+            ':FUNCTION': '"DIOD"',
+            ':VOLT:DC:NULL:STATE': '0',
+            ':VOLT:DC:NULL:VALUE': '+0.00000000E+00',
+            ':VOLT:DC:NULL:VALUE:AUTO': '0',
+            ':VOLT:DC:RANGE': '+2.00000000E-01',
+            ':VOLT:DC:RANGE:AUTO': '1',
+            ':VOLT:DC:NPLC': '+1.00000000E+01',
+            ':VOLT:DC:IMP': '10M',
+            ':VOLT:AC:NULL:STATE': '0',
+            ':VOLT:AC:NULL:VALUE': '+0.00000000E+00',
+            ':VOLT:AC:NULL:VALUE:AUTO': '0',
+            ':VOLT:AC:RANGE': '+2.00000000E-01',
+            ':VOLT:AC:RANGE:AUTO': '1',
+            ':CURR:DC:NULL:STATE': '0',
+            ':CURR:DC:NULL:VALUE': '+0.00000000E+00',
+            ':CURR:DC:NULL:VALUE:AUTO': '0',
+            ':CURR:DC:RANGE': '+2.00000000E-04',
+            ':CURR:DC:RANGE:AUTO': '1',
+            ':CURR:DC:NPLC': '+1.00000000E+01',
+            ':CURR:AC:NULL:STATE': '0',
+            ':CURR:AC:NULL:VALUE': '+0.00000000E+00',
+            ':CURR:AC:NULL:VALUE:AUTO': '0',
+            ':CURR:AC:RANGE': '+2.00000000E-02',
+            ':CURR:AC:RANGE:AUTO': '1',
+            ':RES:NULL:STATE': '0',
+            ':RES:NULL:VALUE': '+0.00000000E+00',
+            ':RES:NULL:VALUE:AUTO': '0',
+            ':RES:RANGE': '+2.00000000E+02',
+            ':RES:RANGE:AUTO': '1',
+            ':RES:NPLC': '+1.00000000E+01',
+            ':FRES:NULL:STATE': '0',
+            ':FRES:NULL:VALUE': '+0.00000000E+00',
+            ':FRES:NULL:VALUE:AUTO': '0',
+            ':FRES:RANGE': '+2.00000000E+02',
+            ':FRES:RANGE:AUTO': '1',
+            ':FRES:NPLC': '+1.00000000E+01',
+            ':CAP:NULL:STATE': '0',
+            ':CAP:NULL:VALUE': '+0.00000000E+00',
+            ':CAP:NULL:VALUE:AUTO': '0',
+            ':CAP:RANGE': '+2.00000000E-07',
+            ':CAP:RANGE:AUTO': '1',
+            ':CONT:THRESHOLD:VALUE': '+5.00000000E+01',
+            ':CONT:VOLUME:STATE': 'MIDDLE',
+            ':DIOD:THRESHOLD:VALUE': '+3.00000000E+00',
+            ':DIOD:VOLUME:STATE': 'MIDDLE',
+            ':FREQ:NULL:STATE': '0',
+            ':FREQ:NULL:VALUE': '+0.00000000E+00',
+            ':FREQ:NULL:VALUE:AUTO': '0',
+            ':FREQ:VOLT:RANGE': '+2.00000000E+00',
+            ':FREQ:VOLT:RANGE:AUTO': '1',
+            ':PER:NULL:STATE': '0',
+            ':PER:NULL:VALUE': '+0.00000000E+00',
+            ':PER:NULL:VALUE:AUTO': '0',
+            ':PER:VOLT:RANGE': '+2.00000000E+00',
+            ':PER:VOLT:RANGE:AUTO': '1',
+            ':TEMP:NULL:STATE': '0',
+            ':TEMP:NULL:VALUE': '+0.00000000E+00',
+            ':TEMP:NULL:VALUE:AUTO': '0',
+            ':TEMP:UDEFINE:THER:TRAN:LIST': 'NONE',
+            ':TEMP:UDEFINE:RTD:TRAN:LIST': 'NONE',
+            ':TEMP:MDEFINE:THER:TRAN:LIST': 'BITS90,EITS90,JITS90,KITS90,NITS90,RITS90,SITS90,TITS90',
+            ':TEMP:MDEFINE:RTD:TRAN:LIST': 'PT100,PT1000',
+            ':UNIT:TEMP': 'C'
+        }
+
+        if model in ('SDM3045X', 'SDM3055'):
+            self._config.update({
+                ':VOLT:DC:FILTER:STATE': '0',
+                ':CURR:DC:FILTER:STATE': '0',
+            })
+        elif model == 'SDM3065X':
+            self._config.update({
+                ':VOLT:AC:BANDWIDTH': '20Hz',
+                ':VOLT:DC:AZ:STATE': '0',
+                ':CURR:AC:BANDWIDTH': '20Hz',
+                ':CURR:DC:AZ:STATE': '0',
+                ':FREQ:APERTURE': '+1.00000000E-01',
+                ':PER:APERTURE': '+1.00000000E-01',
+                ':RES:AZ:STATE': '0',
+                ':FRES:AZ:STATE': '0',
+            })
+        else:
+            assert False, model
+
+    async def connect(self, *args, **kwargs):
+        """Connect to the instrument and set it to remote state."""
+        self._connected = True
+        self._long_name = f'{self._model} @ {self._resource_name}'
+
+    async def disconnect(self, *args, **kwargs):
+        """Disconnect from the instrument and turn off its remote state."""
+        self._connected = False
+
+    async def query(self, s):
+        """VISA query, write then read."""
+        if not self._connected:
+            raise NotConnected
+        assert s[-1] == '?', s
+        s = s[:-1]
+        if s == 'READ':
+            await asyncio.sleep(0.2)
+            ret = str(random.random())
+        elif s == ':FUNCTION':
+            ret = random.choice((
+                'VOLT:DC', 'VOLT:AC', 'CURR:DC', 'CURR:AC',
+                'RES', 'FRES', 'CAP', 'CONT', 'DIOD', 'FREQ', 'PER', 'TEMP'
+            ))
+        elif s.endswith(':NULL:STATE'):
+            ret = random.randint(0, 1)
+        elif s in ('CURR:AC:NULL:VALUE', 'CURR:DC:NULL:VALUE'):
+            ret = random.uniform(-11, 11) # Correct?
+        elif s in ('FREQ:AC:NULL:VALUE', 'PER:DC:NULL:VALUE'):
+            ret = random.uniform(-1.2e6, 1.2e6) # Correct?
+        elif s in ('RES:AC:NULL:VALUE', 'FRES:DC:NULL:VALUE'):
+            ret = random.uniform(-110e6, 110e6) # Correct?
+        elif s == 'TEMP:NULL:VALUE':
+            ret = random.uniform(-1e15, 1e15) # Correct?
+        elif s == 'CAP:NULL:VALUE':
+            ret = random.uniform(-12e-3, 12e-3) # Correct?
+        elif s in ('VOLT:AC:NULL:VALUE', 'VOLT:DC:NULL:VALUE'):
+            ret = random.uniform(-1200, 1200) # Correct?
+        elif s == 'CONT:THRESHOLD:VALUE':
+            ret = random.uniform(0, 2000)
+        elif s == 'DIOD:THRESHOLD:VALUE':
+            ret = random.uniform(0, 2000)
+        elif s.endswith(':IMP'):
+            ret = random.choice(('10M', '10G'))
+        elif s == ':VOLT:AC:RANGE':
+            ret = random.choice(list(_RANGE_VAC_SCPI_READ_TO_WRITE[self._model].keys()))
+        elif s == ':VOLT:DC:RANGE':
+            ret = random.choice(list(_RANGE_VDC_SCPI_READ_TO_WRITE[self._model].keys()))
+        elif s == ':CURR:AC:RANGE':
+            ret = random.choice(list(_RANGE_IAC_SCPI_READ_TO_WRITE[self._model].keys()))
+        elif s == ':CURR:DC:RANGE':
+            ret = random.choice(list(_RANGE_IDC_SCPI_READ_TO_WRITE[self._model].keys()))
+        elif s in (':RES:RANGE', ':FRES:RANGE'):
+            ret = random.choice(list(_RANGE_R_SCPI_READ_TO_WRITE[self._model].keys()))
+        elif s == ':CAP:RANGE':
+            ret = random.choice(list(_RANGE_C_SCPI_READ_TO_WRITE[self._model].keys()))
+        elif s in (':FREQ:VOLT:RANGE', ':PER:VOLT:RANGE'):
+            # XXX
+            ret = random.choice(list(_RANGE_VAC_SCPI_READ_TO_WRITE[self._model].keys()))
+        elif s.endswith(':NPLC'):
+            ret = random.choice(('0.3', '1', '10'))
+        else:
+            ret = self._config[s]
+        self._config[s] = ret
+        self._logger.debug(f'{self._long_name} - query "{s}" returned "{ret}"')
+        return ret
+
+    async def write(self, s):
+        """VISA write, appending termination characters."""
+        self._logger.debug(f'{self._long_name} - write "{s}"')
+        ind = s.index(' ')
+        assert ind != -1, s
+        param_name = s[:ind]
+        val = s[ind+1:]
+        self._config[param_name] = val
+        # Validate values here

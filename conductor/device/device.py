@@ -40,7 +40,7 @@ class InstrumentClosed(Exception):
 
 
 class Device(object):
-    """Class representing any generic device accessible through VISA."""
+    """Class representing any generic device."""
     def __init__(self, resource_name):
         self._ready_to_close = False
         self._resource_name = resource_name
@@ -297,28 +297,6 @@ class Device(object):
         if self._ready_to_close:
             self._logger.debug(f'{self._long_name} - write_raw while ready to close')
             raise InstrumentClosed
-
-    ### Internal support routines
-
-    async def _read_write(self, query, write, validator=None, value=None):
-        if value is None:
-            return await self.query(query)
-        if validator is not None:
-            validator(value)
-        await self.write(f'{write} {value}')
-        return None
-
-    def _validator_1(self, value):
-        if value < 0 or value > 1:
-            raise ValueError
-
-    def _validator_8(self, value):
-        if not (0 <= value <= 255):  # Should this be 128? Or -128?
-            raise ValueError
-
-    def _validator_16(self, value):
-        if not (0 <= value <= 65535):
-            raise ValueError
 
 
 class Device4882(Device):

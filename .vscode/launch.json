@@ -115,6 +115,42 @@
                 "192.168.0.63",
                 "192.168.0.64"
             ]
-        }
+        },
+        {
+            "name": "FAKE SDM3045X",
+            "type": "python",
+            "request": "launch",
+            "program": "inst_conductor.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--console-log-level", "debug",
+                "FAKE::SDM3045X"
+            ]
+        },
+        {
+            "name": "FAKE SDM3055",
+            "type": "python",
+            "request": "launch",
+            "program": "inst_conductor.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--console-log-level", "debug",
+                "FAKE::SDM3055"
+            ]
+        },
+        {
+            "name": "FAKE SDM3065X",
+            "type": "python",
+            "request": "launch",
+            "program": "inst_conductor.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--console-log-level", "debug",
+                "FAKE::SDM3065X"
+            ]
+        },
     ]
 }
