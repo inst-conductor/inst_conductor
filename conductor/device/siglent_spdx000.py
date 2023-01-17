@@ -1,10 +1,13 @@
 ################################################################################
-# conductor/device/siglent_spd3303.py
+# conductor/device/siglent_spdx000.py
 #
 # This file is part of the inst_conductor software suite.
 #
-# It contains all code related to the Siglent SPD3303X series of programmable
+# It contains all code related to the Siglent SPDx000 series of programmable
 # DC electronic loads:
+#   - SPD1168X
+#   - SPD1305X
+#   - SPD3303C
 #   - SPD3303X
 #   - SPD3303X-E
 #
@@ -26,8 +29,8 @@
 
 ################################################################################
 # This module contains two basic sections. The internal instrument driver is
-# specified by the InstrumentSiglentSPD3303 class. The GUI for the control
-# widget is specified by the InstrumentSiglentSPD3303ConfigureWidget class.
+# specified by the InstrumentSiglentSPDx000 class. The GUI for the control
+# widget is specified by the InstrumentSiglentSPDx000ConfigureWidget class.
 #
 # Hidden accelerator keys:
 #   Alt+A       Channel 1 ON/OFF
@@ -72,8 +75,8 @@ from conductor.device import (Device4882,
 from conductor.version import VERSION
 
 
-class InstrumentSiglentSPD3303(Device4882):
-    """Controller for SPD3303-series devices."""
+class InstrumentSiglentSPDx000(Device4882):
+    """Controller for SPDx000-series devices."""
 
     @classmethod
     def idn_mapping(cls):
@@ -82,21 +85,28 @@ class InstrumentSiglentSPD3303(Device4882):
         #   X   =>  1 mV /  1 mA
         #   X-E => 10 mV / 10 mA
         return {
-            ('Siglent Technologies', 'SPD3303X'):   InstrumentSiglentSPD3303,
-            ('Siglent Technologies', 'SPD3303X-E'): InstrumentSiglentSPD3303,
+            ('Siglent Technologies', 'SPD1168X'):   InstrumentSiglentSPDx000,
+            ('Siglent Technologies', 'SPD1305X'):   InstrumentSiglentSPDx000,
+            ('Siglent Technologies', 'SPD3303C'):   InstrumentSiglentSPDx000,
+            ('Siglent Technologies', 'SPD3303X'):   InstrumentSiglentSPDx000,
+            ('Siglent Technologies', 'SPD3303X-E'): InstrumentSiglentSPDx000,
         }
 
     @classmethod
     def supported_instruments(cls):
         """Return a list of supported instrument models."""
         return (
+            'SPD1168X',
+            'SPD1305X',
+            'SPD3303C',
             'SPD3303X',
             'SPD3303X-E'
         )
 
-    def __init__(self, *args, existing_names=None, **kwargs):
+    def __init__(self, *args, existing_names=None, manufacturer=None, model=None,
+                 **kwargs):
         super().__init__(*args, **kwargs)
-        super().init_names('SPD3303', 'SPD', existing_names)
+        super().init_names('SPDx000', 'SPD', existing_names)
 
     async def connect(self, *args, **kwargs):
         await super().connect(*args, **kwargs)
@@ -121,7 +131,7 @@ class InstrumentSiglentSPD3303(Device4882):
         await super().disconnect(*args, **kwargs)
 
     def configure_widget(self, main_window, measurements_only):
-        return InstrumentSiglentSPD3303ConfigureWidget(
+        return InstrumentSiglentSPDx000ConfigureWidget(
             main_window,
             self,
             measurements_only=measurements_only)
@@ -172,7 +182,7 @@ _PRESETS = [
 
 # This class encapsulates the main SDL configuration widget.
 
-class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
+class InstrumentSiglentSPDx000ConfigureWidget(ConfigureWidgetBase):
     def __init__(self, *args, **kwargs):
         # Widgets that can be hidden
         # These could be put in the widget registry but this makes them easier to
@@ -851,7 +861,7 @@ class InstrumentSiglentSPD3303ConfigureWidget(ConfigureWidgetBase):
     def _menu_do_about(self):
         """Show the About box."""
         supported = ', '.join(self._inst.supported_instruments())
-        msg = f"""Siglent SPD3303X-series instrument interface ({VERSION}).
+        msg = f"""Siglent SPD1000/3000-series instrument interface ({VERSION}).
 
 Copyright 2023, Robert S. French.
 
@@ -1700,28 +1710,70 @@ Alt+N      All channels ON
             self._update_timer_table_graphs(timer_step_only=True)
 
 
-"""
-*SAV 1-5
-*RCL 1-5
-INST CH1|2
-INST?
-CH1:CURR <>
-CH1:CURR?
-CH1:VOLT <x>
-CH1:VOLT?
-OUTPUT CH1|2|3,ON|OFF
-OUTPUT:TRACK 0|1|2  (independent, series, parallel)
-OUTPUT:WAVE CH1|2,ON|OFF
-TIMER:SET CH1|2,1-5,V,C,Time
-TIMER:SET? CH1|2,1-5
-SYST:STATUS? (returns hex)
-  0 - CH1 CV/CC
-  1 - CH2 CV/CC
-  2,3 - 01: Ind, 10: Parallel, 11: Series
-  4 - CH1 Off/on
-  5 - CH2 Off/on
-  6 - TIMER1 off/on
-  7 - TIMER2 off/on
-  8 - CH1 analog, waveform
-  9 - CH2 analog, waveform
-"""
+##########################################################################################
+# SCPI COMMAND REFERENCE
+##########################################################################################
+#
+# We only include the portions of the SCPI commands that we use. We ignore:
+#
+# *LOCK
+# *UNLOCK
+# SYSTem:ERRor?
+# SYSTem:VERSion?
+#
+# SPD1168X/SPD1305X/SPD3303X/SPD3303X-E ONLY
+#   IPaddr
+#   MASKaddr
+#   GATEaddr
+#   DHCP
+#
+# SPD3303X/SPD3303X-E ONLY:
+#   OUTPUT:WAVE
+#
+##########################################################################################
+#
+# SPD1305X is 30 V / 5 A
+# SPD1168X is 16 V / 8 A
+# SP3303C/SPD3303X/SPD3303X-E is 32 V / 3.2 A
+#
+# SPD3303C, SPD3303X, SPD3303X-E: <varchan> = {CH1|CH2}, allchan = {CH1|CH2|CH3}
+# SPD1168X, SPD1305X:             <varchan> = CH1        allchan = CH1
+# *SAV {1|2|3|4|5}
+# *RCL {1|2|3|4|5}
+# INST {<channel>}
+# INST?
+# MEASure:CURRent? {<varchan>}
+# MEASure:VOLTage? {<varchan>}
+#
+# SPD1168X/SPD1305X/SPD3303X/SPD3303X-E ONLY:
+#   MEASure:POWEr? {<varchan>}
+#
+# {<channel>}:CURRent {<varchan>}
+# {<channel>}:CURRent?
+# {<channel>}:VOLTage {<varchan>}
+# {<channel>}:VOLTage?
+# OUTPut {<allchan>},{ON|OFF}
+#
+# SPD3303C/SPD3303X/SPD3303X-E ONLY:
+#   OUTPUT:TRACK {0|1|2}
+#       0=independent, 1=series, 2=parallel
+#
+# SPD1168X/SPD1305X ONLY:
+#   MODE:SET {2W|4W}
+#
+# SPD1168X/SPD1305X/SPD3303X/SPD3303X-E ONLY:
+#   TIMEr:SET {<varchan>},<secnum>,<volt>,<curr>,<time>
+#   TIMEr:SET? {<varchan>},<secnum>
+#       <secnum> = 1-5
+#   TIMEr {<varchan>},{ON|OFF}
+#
+# SYSTem:STATus? (returns hex)
+#   0   - CH1 CV/CC
+#   1   - CH2 CV/CC
+#   2,3 - 01: Ind, 10: Parallel, 11: Series
+#   4   - CH1 Off/on
+#   5   - CH2 Off/on (SPD3303C/SPD3303X/SPD3303X-E); 2W/4W {SPD1168X/SPD1305X}
+#   6   - TIMER1 off/on
+#   7   - TIMER2 off/on
+#   8   - CH1 analog, waveform
+#   9   - CH2 analog, waveform

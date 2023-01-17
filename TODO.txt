@@ -117,6 +117,12 @@
 - Cleanup:
   - Clean up widget init code to have more standardized names
 
+- Only difference between SPD3303C and SPD3303X is SPD3303C doesn't have a TIMER
+  - 1 channel, no series/parallel
+  - MODE:SET {2W|4W}
+  - Status byte: 0 = CV/CC, 4 = OFF/ON, 5 = 2W/4W, 6 = TIMER OFF/ON, 8=digital/waveform
+
+
 
 ** SDM **
 
@@ -167,3 +173,11 @@ Siglent Technologies,SDG1062X,SDG1XCAQ4R3005,1.01.01.33R1B6
 pyinstaller inst_conductor.py --hidden-import pyqtgraph.graphicsItems.ViewBox.axisCtrlTemplate_pyqt6 --hidden-import pyqtgraph.graphicsItems.ViewBox.axisCtrlTemplate_pyqt6 --hidden-import pyqtgraph.graphicsItems.PlotItem.plotConfigTemplate_pyqt6 --hidden-import pyqtgraph.imageview.ImageViewTemplate_pyqt6 --hidden-import pyvisa_py --noconfirm --onefile --windowed
 
 https://github.com/pyqtgraph/pyqtgraph/issues/1381
+
+
+** WSL **
+
+To get Qt to work under Windows/WSL:
+
+- sudo apt-get install qtbase5-dev
+  - qhttps://forum.qiime2.org/t/qiime2-2017-5-installation-on-windows-subsystem-for-linux/694

@@ -62,7 +62,7 @@
 ################################################################################
 # *IDN? returns:
 #
-# Siglent Technologies,SDM3055,SDM35FAQ1R1838,1.01.01.25
+# Siglent Technologies,SDM3055,SN123456789,1.01.01.25
 ################################################################################
 
 
@@ -105,10 +105,11 @@ class InstrumentSiglentSDM3000(Device4882):
     @classmethod
     def idn_mapping(cls):
         """Map IDN information to an instrument class."""
-        # The only relevant difference between these models is the number of digits:
+        # The main difference between these models is the number of digits:
         #   SDM3045X => 4 1/2
         #   SDM3055  => 5 1/2
         #   SDM3065X => 6 1/2
+        # See the SCPI reference below for other differences
         return {
             ('Siglent Technologies', 'SDM3045X'): InstrumentSiglentSDM3000,
             ('Siglent Technologies', 'SDM3055'):  InstrumentSiglentSDM3000,
@@ -129,7 +130,8 @@ class InstrumentSiglentSDM3000(Device4882):
         """Return the class of the fake instrument."""
         return FakeInstrumentSiglentSDM3000
 
-    def __init__(self, *args, existing_names=None, **kwargs):
+    def __init__(self, *args, existing_names=None, manufacturer=None, model=None,
+                 **kwargs):
         super().__init__(*args, **kwargs)
         super().init_names('SDM3000', 'SDM', existing_names)
 
@@ -2195,6 +2197,25 @@ Connected to {self._inst.resource_name}
 
 ##########################################################################################
 # SCPI COMMAND REFERENCE
+##########################################################################################
+#
+# We only include the portions of the SCPI commands that we use. We ignore:
+#   ABORT
+#   FETCH
+#   INIT
+#   OUTPUT:TRIGGER:SLOPE
+#   R?
+#   READ?
+#   SAMPLE:COUNT
+#   CALC:xxx
+#   CONF:xxx
+#   DATA:xxx
+#   MEAS:xxx
+#   TRIG:xxx
+#   ROUT:xxx
+#   SYST:PRESET
+#   SYST:COMMUNICATE
+#
 ##########################################################################################
 #
 # [SENSe:]FUNCtion[:ON] function

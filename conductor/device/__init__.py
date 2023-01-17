@@ -27,7 +27,7 @@ from .device import (Device4882,
                      NotConnected)
 from .siglent_sdl1000 import InstrumentSiglentSDL1000
 from .siglent_sdm3000 import InstrumentSiglentSDM3000
-from .siglent_spd3303 import InstrumentSiglentSPD3303
+from .siglent_spdx000 import InstrumentSiglentSPDx000
 
 
 _DEVICE_MAPPING = {}  # Mapping of IDN to Python class
@@ -37,7 +37,7 @@ SUPPORTED_INSTRUMENTS = []  # List of model numbers of supported instruments
 # install images and it's a small list for now anyway.
 for cls in (InstrumentSiglentSDL1000,
             InstrumentSiglentSDM3000,
-            InstrumentSiglentSPD3303):
+            InstrumentSiglentSPDx000):
     _DEVICE_MAPPING.update(cls.idn_mapping())
     SUPPORTED_INSTRUMENTS += cls.supported_instruments()
 

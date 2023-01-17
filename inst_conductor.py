@@ -45,7 +45,13 @@ async def main():
     loop = asyncio.get_event_loop()
     future = asyncio.Future()
 
-    app = QApplication(sys.argv)  # sys.argv is modified to remove Qt options
+    # For some reason calling QApplication() directly freezes on Ubuntu. This
+    # may be because there is already a QApplication instance and there are now
+    # two event loops. The (bad) fix for this is to just use the existing instance
+    # instead of creating a new one, but this eliminates the possibility of passing
+    # in arguments to Qt.
+    app = QApplication.instance()
+    # app = QApplication(sys.argv)  # sys.argv is modified to remove Qt options
     if hasattr(app, "aboutToQuit"):
         getattr(app, "aboutToQuit").connect(
             functools.partial(close_future, future, loop))
