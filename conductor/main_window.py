@@ -56,11 +56,11 @@ from conductor.qasync.qasync_helper import (asyncSlotSender,
                                             AsyncIPAddressDialog,
                                             QAsyncFileDialog,
                                             QAsyncMessageBox)
-from conductor.stylesheet import QSS_THEME
 
 import conductor.device as device
 from conductor.plot_histogram_window import PlotHistogramWindow
 from conductor.plot_xy_window import PlotXYWindow
+from conductor.stylesheet import get_master_stylesheet
 from conductor.version import VERSION
 
 
@@ -75,11 +75,13 @@ class MainWindow(QWidget):
 
         match platform.system():
             case 'Linux':
-                self._style_env = 'linux'
+                self._platform = 'linux'
             case 'Windows':
-                self._style_env = 'windows'
+                self._platform = 'windows'
             case 'Darwin':
-                self._style_env = 'windows'
+                self._platform = 'macos'
+
+        self._style_theme = 'standard'
 
         self.app = app
 
@@ -122,6 +124,18 @@ class MainWindow(QWidget):
         self._config_file = config_file
         self._read_config()
 
+    @property
+    def master_stylesheet(self):
+        return self._master_stylesheet
+
+    @property
+    def platform(self):
+        return self._platform
+
+    @property
+    def style_theme(self):
+        return self._style_theme
+
     def _read_config(self):
         """Read the config file and override defaults."""
         self._logger.info(f'Reading config file {self._config_file}')
@@ -153,7 +167,9 @@ class MainWindow(QWidget):
 
     def _init_widgets(self):
         """Initialize the top-level widgets."""
-        self.setStyleSheet(QSS_THEME)
+        self._master_stylesheet = get_master_stylesheet(self._platform,
+                                                        self._style_theme)
+        self.setStyleSheet(self._master_stylesheet)
 
         ### Layout the widgets
 

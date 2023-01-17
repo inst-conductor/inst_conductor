@@ -109,6 +109,7 @@ class InstrumentSiglentSPDx000(Device4882):
         super().init_names('SPDx000', 'SPD', existing_names)
 
     async def connect(self, *args, **kwargs):
+        """Connect to the instrument and set it to remote state."""
         await super().connect(*args, **kwargs)
         idn = await self.idn()
         idn = idn.split(',')
@@ -137,15 +138,19 @@ class InstrumentSiglentSPDx000(Device4882):
             measurements_only=measurements_only)
 
     async def measure_voltage(self, ch):
+        """Return the measured voltage as a float."""
         return round(float(await self.query(f'MEAS:VOLT? CH{ch}')), 6)
 
     async def measure_current(self, ch):
+        """Return the measured current as a float."""
         return round(float(await self.query(f'MEAS:CURR? CH{ch}')), 6)
 
     async def measure_power(self, ch):
+        """Return the measured power as a float."""
         return round(float(await self.query(f'MEAS:POWER? CH{ch}')), 6)
 
     async def measure_vcp(self, ch):
+        """Return measured voltage, current, and power."""
         return (await self.measure_voltage(ch),
                 await self.measure_current(ch),
                 await self.measure_power(ch))
@@ -155,20 +160,15 @@ class InstrumentSiglentSPDx000(Device4882):
 ##########################################################################################
 ##########################################################################################
 
-
-# Style sheets for different operating systems
-_STYLE_SHEET = {
-    'TimerTable': {
-        'windows': """QTableView { min-width: 17em; max-width: 17em;
-                                   min-height: 11em; max-height: 11em; }""",
-        'linux': """QTableView { min-width: 18em; max-width: 18em;
-                                 min-height: 10em; max-height: 10em; }""",
-    },
+_STYLE_PARAMETERS = {
     'TimerPlot': {
         'windows': (300, 178),
         'linux': (485, 172),
     },
 }
+
+
+# Default presets
 
 _PRESETS = [
     [ 2.5, 3.2], # noqa: E201
@@ -183,6 +183,79 @@ _PRESETS = [
 # This class encapsulates the main SDL configuration widget.
 
 class InstrumentSiglentSPDx000ConfigureWidget(ConfigureWidgetBase):
+    def _get_style_sheet(self):
+        def p(windows, linux):
+            if self._style_env == 'windows':
+                return windows
+            return linux
+
+        return f"""
+QGroupBox#SPDCh1 {{
+    margin-top: 0.45em;
+    font-size: 16px;
+    border: 5px solid #a0ff80;
+    padding-top: 0.8em;
+}}
+
+QGroupBox#SPDCh2 {{
+    margin-top: 0.45em;
+    font-size: 16px;
+    border: 5px solid #ffff20;
+    padding-top: 0.8em;
+}}
+
+QGroupBox#SPDCh1::title {{
+    subcontrol-position: top center;
+    background-color: #a0ff80; color: black;
+}}
+
+QGroupBox#SPDCh2::title {{
+    subcontrol-position: top center;
+    background-color: #ffff20; color: black;
+}}
+
+MultiSpeedSpinBox#SPDMinMax {{ min-width: 4em; max-width: 4em; }}
+
+MultiSpeedSpinBox#SPDSetPoint {{ font-size: 30px; min-width: 4em; max-width: 4em; }}
+
+QPushButton#SPDPreset {{ min-width: 7em; max-width: 7em;
+                         min-height: 1em; max-height: 1em;
+                         font-weight: bold;
+                         border-radius: 0.5em; border: 2px solid black; }}
+QPushButton#SPDPreset::pressed {{ border: 3px solid black; }}
+
+QLabel#SPDMeasurementCV {{ font-size: 30px; font-weight: bold; font-family: "Courier New";
+                           min-width: 4.5em; color: yellow; }}
+QLabel#SPDMeasurementP {{ font-size: 15px; font-weight: bold; font-family: "Courier New";
+                          min-width: 2.5em; color: yellow; }}
+
+QPushButton#SPDOutputOnCC, QPushButton#SPDOutputOnCV, QPushButton#SPDOutputOff {{
+                        min-width: 6.5em; max-width: 6.5em;
+                        min-height: 1em; max-height: 1em;
+                        border-radius: 0.4em; border: 5px solid black;
+                        font-weight: bold; font-size: 22px; }}
+QPushButton#SPDOutputOnCC:pressed, QPushButton#SPDOutputOnCV:pressed,
+QPushButton#SPDOutputOff:pressed {{ border: 7px solid black; }}
+QPushButton#SPDOutputOnCC {{ background-color: #ffc0c0; }}
+QPushButton#SPDOutputOnCV {{ background-color: #c0ffb0; }}
+QPushButton#SPDOutputOff {{ background-color: #c0c0c0; }}
+
+QWidget#SPDMeasurementBlock {{ background-color: #000000; }}
+
+QPushButton#SPDTimerOn, QPushButton#SPDTimerOff {{
+                        min-width: 4em; max-width: 4em;
+                        min-height: 1em; max-height: 1em;
+                        border-radius: 0.4em; border: 3px solid black;
+                        font-weight: bold; font-size: 14px; }}
+QPushButton#SPDTimerOn:pressed, QPushButton#SPDTimerOff:pressed {{
+                        border: 5px solid black; }}
+QPushButton#SPDTimerOn {{ background-color: #c0ffb0; }}
+QPushButton#SPDTimerOff {{ background-color: #c0c0c0; }}
+
+QTableView {{ min-width: {p(17,18)}em; max-width: {p(17,18)}em;
+              min-height: {p(11,10)}em; max-height: {p(11,10)}em; }}
+"""
+
     def __init__(self, *args, **kwargs):
         # Widgets that can be hidden
         # These could be put in the widget registry but this makes them easier to
@@ -582,15 +655,7 @@ class InstrumentSiglentSPDx000ConfigureWidget(ConfigureWidgetBase):
     def _init_widgets_add_channel(self, ch):
         """Set up the widgets for one channel."""
         frame = QGroupBox(f'Channel {ch+1}')
-        frame.setObjectName(f'Ch{ch+1}')
-        if ch == 0:
-            bgcolor = '#a0ff80'
-        else:
-            bgcolor = '#ffff20'
-        ss = f"""QGroupBox {{ border: 5px solid {bgcolor}; }}
-                 QGroupBox::title {{ subcontrol-position: top center;
-                                     background-color: {bgcolor}; color: black; }}"""
-        # frame.setStyleSheet(ss)
+        frame.setObjectName(f'SPDCh{ch+1}')
 
         vert_layout = QVBoxLayout(frame)
         vert_layout.setContentsMargins(0, 0, 0, 0)
@@ -614,8 +679,7 @@ class InstrumentSiglentSPDx000ConfigureWidget(ConfigureWidgetBase):
                 layoutg2.addWidget(QLabel(f'{cv} {mm}:'), mm_num, 0,
                                    Qt.AlignmentFlag.AlignLeft)
                 input = MultiSpeedSpinBox(1.)
-                ss = """min-width: 4em; max-width: 4em;"""
-                input.setStyleSheet(ss)
+                input.setObjectName('SPDMinMax')
                 input.wid = (mm, cv, ch)
                 input.setAlignment(Qt.AlignmentFlag.AlignRight)
                 input.setSuffix(f' {cvu}')
@@ -640,11 +704,10 @@ class InstrumentSiglentSPDx000ConfigureWidget(ConfigureWidgetBase):
             ###### ROW 2 - MAIN V/C INPUTS ######
 
             # Main V/C inputs
-            ss = """font-size: 30px; min-width: 4em; max-width: 4em;"""
             input = MultiSpeedSpinBox(1.)
+            input.setObjectName('SPDSetPoint')
             input.wid = ('SetPoint', cv, ch)
             self._widgets_setpoints[ch].append(input)
-            input.setStyleSheet(ss)
             input.setAlignment(Qt.AlignmentFlag.AlignRight)
             input.setSuffix(f' {cvu}')
             input.setDecimals(3)
@@ -707,18 +770,13 @@ class InstrumentSiglentSPDx000ConfigureWidget(ConfigureWidgetBase):
         vert_layout.addWidget(w)
         self._widgets_preset_buttons[ch].append(w)
         layoutg = QGridLayout(w)
-        ss = """QPushButton { min-width: 7em; max-width: 7em;
-                              min-height: 1em; max-height: 1em;
-                              font-weight: bold;
-                              border-radius: 0.5em; border: 2px solid black; }
-                QPushButton::pressed { border: 3px solid black; }"""
         for preset_num in range(6):
             row, column = divmod(preset_num, 2)
             button = LongClickButton('32.000V / 3.200A',
                                      self._on_preset_clicked,
                                      self._on_preset_long_click)
+            button.setObjectName('SPDPreset')
             button.wid = (ch, preset_num)
-            button.setStyleSheet(ss)
             layoutg.addWidget(button, row, column)
             self._widget_registry[f'Preset{ch}_{preset_num}'] = button
 
@@ -742,7 +800,6 @@ class InstrumentSiglentSPDx000ConfigureWidget(ConfigureWidgetBase):
             self._on_timer_table_change(ch, *args, **kwargs)
         table.setModel(ListTableModel(f))
         row_layout.addWidget(table)
-        table.setStyleSheet(_STYLE_SHEET['TimerTable'][self._style_env])
         table.verticalHeader().setMinimumWidth(30)
         self._widget_registry[f'TimerTable{ch}'] = table
         row_layout.addStretch()
@@ -776,7 +833,7 @@ class InstrumentSiglentSPDx000ConfigureWidget(ConfigureWidgetBase):
 
         self._widget_registry[f'TimerStepPlot{ch}'] = pw.plot(
             [], pen=pg.mkPen(color='#ffffff', width=1))
-        size = _STYLE_SHEET['TimerPlot'][self._style_env]
+        size = _STYLE_PARAMETERS['TimerPlot'][self._style_env]
         pw.setMaximumSize(size[0], size[1]) # XXX Warning magic constants!
         row_layout.addWidget(pw)
         pw.setLabel(axis='bottom', text='Cumulative Time (s)')
@@ -805,12 +862,14 @@ class InstrumentSiglentSPDx000ConfigureWidget(ConfigureWidgetBase):
         shortcut.activated.connect(self._on_click_output_on_off)
         layouth.addWidget(button)
         self._widget_registry[f'OutputOnOff{ch}'] = button
+        button.setObjectName('SPDOutputOff')
         layouth.addStretch()
         button = QPushButton('TIMER OFF')
         button.wid = ch
         button.clicked.connect(self._on_click_timer_on_off)
         layouth.addWidget(button)
         self._widget_registry[f'TimerOnOff{ch}'] = button
+        button.setObjectName('SPDTimerOff')
         layouth.addStretch()
 
         ###### ROW 6 - MEASUREMENTS ######
@@ -818,27 +877,21 @@ class InstrumentSiglentSPDx000ConfigureWidget(ConfigureWidgetBase):
         # Measurements
         w = QWidget()
         vert_layout.addWidget(w)
-        w.setStyleSheet('background: black;')
+        w.setObjectName('SPDMeasurementBlock')
         layoutv = QVBoxLayout(w)
         self._widgets_measurements[ch].append(w)
 
-        ss = """font-size: 30px; font-weight: bold; font-family: "Courier New";
-                min-width: 4.5em; color: yellow;
-             """
-        ss2 = """font-size: 15px; font-weight: bold; font-family: "Courier New";
-                 min-width: 2.5em; color: yellow;
-             """
         layouth = QHBoxLayout()
         layoutv.addLayout(layouth)
         layouth.addStretch()
         w = QLabel(' ---  V')
         w.setAlignment(Qt.AlignmentFlag.AlignRight)
-        w.setStyleSheet(ss)
+        w.setObjectName('SPDMeasurementCV')
         layouth.addWidget(w)
         self._widget_registry[f'MeasureV{ch}'] = w
         w = QLabel(' ---  A')
         w.setAlignment(Qt.AlignmentFlag.AlignRight)
-        w.setStyleSheet(ss)
+        w.setObjectName('SPDMeasurementCV')
         layouth.addWidget(w)
         self._widget_registry[f'MeasureC{ch}'] = w
         layouth.addStretch()
@@ -847,7 +900,7 @@ class InstrumentSiglentSPDx000ConfigureWidget(ConfigureWidgetBase):
         layouth.addStretch()
         w = QLabel(' ---  W')
         w.setAlignment(Qt.AlignmentFlag.AlignRight)
-        w.setStyleSheet(ss2)
+        w.setObjectName('SPDMeasurementP')
         layouth.addWidget(w)
         self._widget_registry[f'MeasureP{ch}'] = w
         layouth.addStretch()
@@ -1415,22 +1468,15 @@ Alt+N      All channels ON
             if self._psu_on_off[ch]:
                 if self._psu_cc[ch]:
                     bt.setText('OUTPUT ON (CC)')
-                    bg_color = '#ffc0c0'
+                    bt.setObjectName('SPDOutputOnCC')
                 else:
                     bt.setText('OUTPUT ON (CV)')
-                    bg_color = '#c0ffb0'
+                    bt.setObjectName('SPDOutputOnCV')
             else:
                 bt.setText('OUTPUT OFF')
-                bg_color = '#c0c0c0'
-            ss = f"""QPushButton {{
-                        background-color: {bg_color};
-                        min-width: 6.5em; max-width: 6.5em;
-                        min-height: 1em; max-height: 1em;
-                        border-radius: 0.4em; border: 5px solid black;
-                        font-weight: bold; font-size: 22px; }}
-                     QPushButton:pressed {{ border: 7px solid black; }}
-                  """
-            bt.setStyleSheet(ss)
+                bt.setObjectName('SPDOutputOff')
+            bt.style().unpolish(bt) # Needed when name changes
+            bt.style().polish(bt)
 
     def _update_timer_on_off_buttons(self):
         """Update the style of the TIMER buttons based on current state.
@@ -1440,19 +1486,12 @@ Alt+N      All channels ON
             bt = self._widget_registry[f'TimerOnOff{ch}']
             if self._timer_mode_running[ch]:
                 bt.setText('TIMER ON')
-                bg_color = '#c0ffb0'
+                bt.setObjectName('SPDTimerOn')
             else:
                 bt.setText('TIMER OFF')
-                bg_color = '#c0c0c0'
-            ss = f"""QPushButton {{
-                        background-color: {bg_color};
-                        min-width: 4em; max-width: 4em;
-                        min-height: 1em; max-height: 1em;
-                        border-radius: 0.4em; border: 3px solid black;
-                        font-weight: bold; font-size: 14px; }}
-                     QPushButton:pressed {{ border: 5px solid black; }}
-                  """
-            bt.setStyleSheet(ss)
+                bt.setObjectName('SPDTimerOff')
+            bt.style().unpolish(bt) # Needed when name changes
+            bt.style().polish(bt)
             # Only enable the timer button in Independent mode when at least one
             # Timer entry has non-zero duration. If we don't do this, and try to
             # start the timer, the SPD will beep and show an error.

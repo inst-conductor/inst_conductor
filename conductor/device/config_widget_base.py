@@ -43,7 +43,6 @@ from PyQt6.QtPrintSupport import QPrintDialog
 from conductor.qasync import asyncSlot, asyncClose
 from conductor.qasync.qasync_helper import (QAsyncInputDialog,
                                             QAsyncMessageBox)
-from conductor.stylesheet import QSS_THEME
 
 from conductor.device import (InstrumentClosed,
                               NotConnected)
@@ -55,7 +54,8 @@ class ConfigureWidgetBase(QWidget):
     Must call refresh after instance creation."""
     def __init__(self, main_window, instrument, measurements_only=False):
         super().__init__()
-        self._style_env = main_window._style_env
+        self._style_env = main_window.platform
+        self._style_theme = main_window.style_theme
         self._main_window = main_window
         self._inst = instrument
         self._statusbar = None
@@ -79,6 +79,10 @@ class ConfigureWidgetBase(QWidget):
 
     ### Internal utility functions.
 
+    def _get_style_sheet(self):
+        """Return the top-level style sheet for the current platform and theme."""
+        return ''
+
     def _toplevel_widget(self, has_reset=True):
         """Create the basic toplevel configuration widget.
 
@@ -88,7 +92,8 @@ class ConfigureWidgetBase(QWidget):
         QWidget.__init__(self)
         self.setWindowTitle(f'{self._inst.long_name} ({self._inst.name})')
 
-        self.setStyleSheet(QSS_THEME)
+        self.setStyleSheet(self._main_window.master_stylesheet +
+                           self._get_style_sheet())
 
         layoutv = QVBoxLayout(self)
         layoutv.setContentsMargins(0, 0, 0, 0)
