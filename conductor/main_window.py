@@ -51,11 +51,11 @@ from PyQt6.QtWidgets import (QButtonGroup,
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence
 
-from conductor.qasync import asyncSlot, asyncClose
-from conductor.qasync.qasync_helper import (asyncSlotSender,
-                                            AsyncIPAddressDialog,
-                                            QAsyncFileDialog,
-                                            QAsyncMessageBox)
+from qasync import asyncSlot, asyncClose
+from conductor.qasync_helper import (asyncSlotSender,
+                                     AsyncIPAddressDialog,
+                                     QAsyncFileDialog,
+                                     QAsyncMessageBox)
 
 import conductor.device as device
 from conductor.plot_histogram_window import PlotHistogramWindow

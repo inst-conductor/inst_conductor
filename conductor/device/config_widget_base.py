@@ -40,9 +40,9 @@ from PyQt6.QtCore import Qt, QAbstractTableModel, QTimer
 from PyQt6.QtGui import QAction, QColor
 from PyQt6.QtPrintSupport import QPrintDialog
 
-from conductor.qasync import asyncSlot, asyncClose
-from conductor.qasync.qasync_helper import (QAsyncInputDialog,
-                                            QAsyncMessageBox)
+from qasync import asyncSlot, asyncClose
+from conductor.qasync_helper import (QAsyncInputDialog,
+                                     QAsyncMessageBox)
 
 from conductor.device import (InstrumentClosed,
                               NotConnected)

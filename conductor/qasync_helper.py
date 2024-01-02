@@ -1,5 +1,5 @@
 ################################################################################
-# conductor/qasync/qasync_helper.py
+# conductor/qasync_helper.py
 #
 # This file is part of the inst_conductor software suite.
 #

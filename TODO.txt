@@ -170,7 +170,12 @@ Siglent Technologies,SDG1062X,SDG1XCAQ4R3005,1.01.01.33R1B6
 
 ** PyInstaller **
 
-pyinstaller inst_conductor.py --hidden-import pyqtgraph.graphicsItems.ViewBox.axisCtrlTemplate_pyqt6 --hidden-import pyqtgraph.graphicsItems.ViewBox.axisCtrlTemplate_pyqt6 --hidden-import pyqtgraph.graphicsItems.PlotItem.plotConfigTemplate_pyqt6 --hidden-import pyqtgraph.imageview.ImageViewTemplate_pyqt6 --hidden-import pyvisa_py --noconfirm --onefile --windowed
+Must swap lines 16-17 in venv/lib/site-packages/pyqtgraph/canvas/CanvasManager.py:
+
+        QtCore.QObject.__init__(self)
+        CanvasManager.SINGLETON = self
+
+pyinstaller inst_conductor.py --hidden-import pyqtgraph.graphicsItems.ViewBox.axisCtrlTemplate_pyqt6 --hidden-import pyqtgraph.graphicsItems.ViewBox.axisCtrlTemplate_pyqt6 --hidden-import pyqtgraph.graphicsItems.PlotItem.plotConfigTemplate_pyqt6 --hidden-import pyqtgraph.imageview.ImageViewTemplate_pyqt6 --noconfirm --onefile --windowed
 
 https://github.com/pyqtgraph/pyqtgraph/issues/1381
 

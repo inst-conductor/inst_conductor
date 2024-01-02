@@ -29,8 +29,8 @@ import logging
 import os
 import sys
 
-import conductor.qasync
-from conductor.qasync import QApplication
+import qasync
+from qasync import QApplication
 
 import conductor.log as log
 from conductor.main_window import MainWindow
@@ -95,6 +95,6 @@ configuration options""")
     logger.info('Starting')
 
     try:
-        conductor.qasync.run(main())
+        qasync.run(main())
     except asyncio.exceptions.CancelledError:
         sys.exit(0)

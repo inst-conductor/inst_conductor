@@ -58,10 +58,10 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QKeySequence, QShortcut
 import pyqtgraph as pg
 
-from conductor.qasync import asyncSlot
-from conductor.qasync.qasync_helper import (asyncSlotSender,
-                                            QAsyncFileDialog,
-                                            QAsyncMessageBox)
+from qasync import asyncSlot
+from conductor.qasync_helper import (asyncSlotSender,
+                                     QAsyncFileDialog,
+                                     QAsyncMessageBox)
 
 from conductor.device.config_widget_base import (ConfigureWidgetBase,
                                                  DoubleSpinBoxDelegate,
